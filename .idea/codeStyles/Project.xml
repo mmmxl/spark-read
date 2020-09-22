@@ -1,0 +1,13 @@
+<component name="ProjectCodeStyleConfiguration">
+  <code_scheme name="Project" version="173">
+    <ScalaCodeStyleSettings>
+      <option name="SCALAFMT_CONFIG_PATH" value="$PROJECT_DIR$/../../app360/assembly/assembly.iml" />
+    </ScalaCodeStyleSettings>
+    <codeStyleSettings language="JAVA">
+      <option name="WRAP_LONG_LINES" value="true" />
+    </codeStyleSettings>
+    <codeStyleSettings language="Scala">
+      <option name="WRAP_LONG_LINES" value="true" />
+    </codeStyleSettings>
+  </code_scheme>
+</component>
