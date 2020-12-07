@@ -26,6 +26,7 @@ import org.apache.spark.network.util.{ConfigProvider, TransportConf}
  * Provides a utility for transforming from a SparkConf inside a Spark JVM (e.g., Executor,
  * Driver, or a standalone shuffle service) into a TransportConf with details on our environment
  * like the number of cores that are allocated to this JVM.
+ * Rpc框架中的配置类
  */
 object SparkTransportConf {
   /**

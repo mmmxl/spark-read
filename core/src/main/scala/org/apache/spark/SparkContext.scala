@@ -73,9 +73,15 @@ import org.apache.spark.util._
 class SparkContext(config: SparkConf) extends Logging {
 
   // The call site where this SparkContext was constructed.
+  /**
+   * 类型为CallSite,其中保存着线程栈中最靠近栈顶的用户定义的类及最靠近栈底的Scala或者Spark核心类信息，
+   * CallSite的shortForm属性保存这以上信息的简短描述，
+   * CallSite的longForm属性则保存着以上信息的完整描述。
+   */
   private val creationSite: CallSite = Utils.getCallSite()
 
   // If true, log warnings instead of throwing exceptions when multiple SparkContexts are active
+  // 是否允许多个SparkContext实例，默认为false
   private val allowMultipleContexts: Boolean =
     config.getBoolean("spark.driver.allowMultipleContexts", false)
 
@@ -84,8 +90,10 @@ class SparkContext(config: SparkConf) extends Logging {
   // NOTE: this must be placed at the beginning of the SparkContext constructor.
   SparkContext.markPartiallyConstructed(this, allowMultipleContexts)
 
+  // SparkContext启动的时间戳
   val startTime = System.currentTimeMillis()
 
+  // 标记SparkContext是否已经停止的状态，采用原子类型AtomicBoolean
   private[spark] val stopped: AtomicBoolean = new AtomicBoolean(false)
 
   private[spark] def assertNotStopped(): Unit = {
@@ -188,28 +196,46 @@ class SparkContext(config: SparkConf) extends Logging {
    | of them to some neutral value ahead of time, so that calling "stop()" while the       |
    | constructor is still running is safe.                                                 |
    * ------------------------------------------------------------------------------------- */
-
+  /**
+   * SparkContext的配置,通过调用SparkConf的clone方法的克隆体
+   * 初始化过程中会对conf中的配置信息做校验，e.g. 必须设置spark.master spark.app.name
+   * spark.master=yarn时,spark.submit.deployMode必须为cluster且必须设置spark.yarn.app.id
+   */
   private var _conf: SparkConf = _
+  // 事件日志的路径,spark.eventLog.enabled=true启用，默认/tmp/spark-events. spark.eventLog.dir指定
   private var _eventLogDir: Option[URI] = None
+  // 事件日志的压缩算法 spark.eventLog.enabled=true + spark.eventLog.compress=true启动
+  // 默认lz4，spark.io.compression.codec指定(lz4,snappy,lzf)
   private var _eventLogCodec: Option[String] = None
   private var _listenerBus: LiveListenerBus = _
   private var _env: SparkEnv = _
-  private var _statusTracker: SparkStatusTracker = _
+  private var _statusTracker: SparkStatusTracker = _ // Spark状态跟踪器SparkStatusTracker
   private var _progressBar: Option[ConsoleProgressBar] = None
   private var _ui: Option[SparkUI] = None
+  /**
+   * Hadoop的配置信息，具体根据Hadoop版本的环境有所区别。
+   */
   private var _hadoopConfiguration: Configuration = _
+  /**
+   * Executor的内存大小，默认1024MB。
+   * 可以通过spark.executor.memory或SPARK_EXEXCUTOR_MEMORY
+   */
   private var _executorMemory: Int = _
   private var _schedulerBackend: SchedulerBackend = _
   private var _taskScheduler: TaskScheduler = _
   private var _heartbeatReceiver: RpcEndpointRef = _
   @volatile private var _dagScheduler: DAGScheduler = _
+  // 当前应用尝试的标识，TaskScheduler启动后会创建应用标识，SparkContext的_applicationId就是TaskScheduler的_applicationId
   private var _applicationId: String = _
+  // 当前应用尝试执行的标识，Spark Driver在执行时会多次尝试执行，每次尝试都将生成一个标示来代表应用尝试执行的身份
   private var _applicationAttemptId: Option[String] = None
   private var _eventLogger: Option[EventLoggingListener] = None
   private var _executorAllocationManager: Option[ExecutorAllocationManager] = None
   private var _cleaner: Option[ContextCleaner] = None
   private var _listenerBusStarted: Boolean = false
+  // 用户设置的Jar文件 spark.jars Yarn模式加上spark.yarn.dist.jars指定的
   private var _jars: Seq[String] = _
+  // 用户设置的文件，spark.files
   private var _files: Seq[String] = _
   private var _shutdownHookRef: AnyRef = _
   private var _statusStore: AppStatusStore = _
@@ -227,79 +253,90 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   def getConf: SparkConf = conf.clone()
 
-  def jars: Seq[String] = _jars
-  def files: Seq[String] = _files
-  def master: String = _conf.get("spark.master")
-  def deployMode: String = _conf.getOption("spark.submit.deployMode").getOrElse("client")
-  def appName: String = _conf.get("spark.app.name")
+  def jars: Seq[String] = _jars // 获取jar包
+  def files: Seq[String] = _files // 获取文件
+  def master: String = _conf.get("spark.master") // 获取部署环境
+  def deployMode: String = _conf.getOption("spark.submit.deployMode").getOrElse("client") //  部署模式
+  def appName: String = _conf.get("spark.app.name") // 应用名称
 
+  // 是否支持事件日志
   private[spark] def isEventLogEnabled: Boolean = _conf.getBoolean("spark.eventLog.enabled", false)
-  private[spark] def eventLogDir: Option[URI] = _eventLogDir
-  private[spark] def eventLogCodec: Option[String] = _eventLogCodec
-
+  private[spark] def eventLogDir: Option[URI] = _eventLogDir // 获取事件日志的目录
+  private[spark] def eventLogCodec: Option[String] = _eventLogCodec // 获取事件日志的压缩算法
+  // 是否是本地部署
   def isLocal: Boolean = Utils.isLocalMaster(_conf)
 
   /**
    * @return true if context is stopped or in the midst of stopping.
+   *         context停止或者正在停止，就为true
    */
   def isStopped: Boolean = stopped.get()
-
+  // 获取AppStatusStore对象
   private[spark] def statusStore: AppStatusStore = _statusStore
 
   // An asynchronous listener bus for Spark events
+  // 一个Spark环境的异步监听器
   private[spark] def listenerBus: LiveListenerBus = _listenerBus
 
-  // This function allows components created by SparkEnv to be mocked in unit tests:
+  // This function allows components[组件] created by SparkEnv to be mocked in unit tests:
+  // 创建一个SparkEnv,实际调用了SparkEnv的createDriverEnv
   private[spark] def createSparkEnv(
       conf: SparkConf,
       isLocal: Boolean,
       listenerBus: LiveListenerBus): SparkEnv = {
     SparkEnv.createDriverEnv(conf, isLocal, listenerBus, SparkContext.numDriverCores(master, conf))
   }
-
+  // 获取SparkEnv实例
   private[spark] def env: SparkEnv = _env
 
   // Used to store a URL for each static file/jar together with the file's local timestamp
+  // 用于每个本地文件的URL与添加此文件到addedFiles时的时间戳之间的映射缓存
   private[spark] val addedFiles = new ConcurrentHashMap[String, Long]().asScala
+  // 用于每个本地Jar文件的URL与添加此文件到addedJars时的时间戳之间的映射缓存
   private[spark] val addedJars = new ConcurrentHashMap[String, Long]().asScala
 
   // Keeps track of all persisted RDDs
+  // 对所有持久化的RDD保持跟踪
   private[spark] val persistentRdds = {
     val map: ConcurrentMap[Int, RDD[_]] = new MapMaker().weakValues().makeMap[Int, RDD[_]]()
     map.asScala
   }
-  def statusTracker: SparkStatusTracker = _statusTracker
+  def statusTracker: SparkStatusTracker = _statusTracker // 得到Spark的状态跟踪器
 
   private[spark] def progressBar: Option[ConsoleProgressBar] = _progressBar
-
+  // SparkUI对象
   private[spark] def ui: Option[SparkUI] = _ui
-
+  // 得到SparkUI的有效的url
   def uiWebUrl: Option[String] = _ui.map(_.webUrl)
 
   /**
    * A default Hadoop Configuration for the Hadoop code (e.g. file systems) that we reuse.
-   *
+   * 默认的Hadoop配置是Hadoop代码(例如文件系统)
    * @note As it will be reused in all Hadoop RDDs, it's better not to modify it unless you
    * plan to set some global configurations for all Hadoop RDDs.
    */
   def hadoopConfiguration: Configuration = _hadoopConfiguration
-
+  // 获取executore的内存
   private[spark] def executorMemory: Int = _executorMemory
 
   // Environment variables to pass to our executors.
+  // 用户存储环境变量，executorEnvs中环境变量都传递给执行任务的executor使用
   private[spark] val executorEnvs = HashMap[String, String]()
 
   // Set SPARK_USER for user who is running SparkContext.
+  // Spark用户，SPARK_USER变量设置
   val sparkUser = Utils.getCurrentUserName()
-
+  // 调度器backend(通信)
   private[spark] def schedulerBackend: SchedulerBackend = _schedulerBackend
-
+  // 获取任务调度器
   private[spark] def taskScheduler: TaskScheduler = _taskScheduler
+  // 设置任务调度器
   private[spark] def taskScheduler_=(ts: TaskScheduler): Unit = {
     _taskScheduler = ts
   }
-
+  // 获取dag调度器
   private[spark] def dagScheduler: DAGScheduler = _dagScheduler
+  // 设置dag调度器
   private[spark] def dagScheduler_=(ds: DAGScheduler): Unit = {
     _dagScheduler = ds
   }
@@ -317,15 +354,16 @@ class SparkContext(config: SparkConf) extends Logging {
   def applicationAttemptId: Option[String] = _applicationAttemptId
 
   private[spark] def eventLogger: Option[EventLoggingListener] = _eventLogger
-
+  // 获取 executor的资源动态管理器
   private[spark] def executorAllocationManager: Option[ExecutorAllocationManager] =
     _executorAllocationManager
 
   private[spark] def cleaner: Option[ContextCleaner] = _cleaner
-
+  // RDD计算过程中保存检查点时所需要的目录
   private[spark] var checkpointDir: Option[String] = None
 
   // Thread Local variable that can be used by users to pass information down the stack
+  // 由InheritableThreadLocal保护的线程本地变量，其中的属性值可以沿着线程栈传递下去，供用户使用
   protected[spark] val localProperties = new InheritableThreadLocal[Properties] {
     override protected def childValue(parent: Properties): Properties = {
       // Note: make a clone such that changes in the parent properties aren't reflected in
@@ -360,6 +398,7 @@ class SparkContext(config: SparkConf) extends Logging {
     Utils.setLogLevel(org.apache.log4j.Level.toLevel(upperCased))
   }
 
+  // SparkContext所有内部属性的初始化，是异常安全的，如果发生了错误，执行stop()
   try {
     _conf = config.clone()
     _conf.validateSettings()
@@ -434,6 +473,8 @@ class SparkContext(config: SparkConf) extends Logging {
 
     _progressBar =
       if (_conf.get(UI_SHOW_CONSOLE_PROGRESS) && !log.isInfoEnabled) {
+        // spark.ui.showConsoleProgress=true 并且 log支付info级别
+        // 创建一个Spark状态跟踪器SparkStatusTracker
         Some(new ConsoleProgressBar(this))
       } else {
         None
@@ -441,6 +482,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
     _ui =
       if (conf.getBoolean("spark.ui.enabled", true)) {
+        // 创建一个SparkUI
         Some(SparkUI.create(Some(this), _statusStore, _conf, _env.securityManager, appName, "",
           startTime))
       } else {
@@ -449,6 +491,7 @@ class SparkContext(config: SparkConf) extends Logging {
       }
     // Bind the UI before starting the task scheduler to communicate
     // the bound port to the cluster manager properly
+    // 给SparkUI绑定端口，启动底层的Jetty服务
     _ui.foreach(_.bind())
 
     _hadoopConfiguration = SparkHadoopUtil.get.newConfiguration(_conf)
@@ -486,20 +529,34 @@ class SparkContext(config: SparkConf) extends Logging {
 
     // We need to register "HeartbeatReceiver" before "createTaskScheduler" because Executor will
     // retrieve "HeartbeatReceiver" in the constructor. (SPARK-6640)
+    /**
+     * 在createTaskScheduler之前创建心跳接收器，因为Executor的构造器需要接受心跳接收器
+     * 使用NettyRpcEnv的setupEndpoint，向rpcEnv注册HeartbeatReceiver，并返回
+     * RpcEndpointRef
+     */
     _heartbeatReceiver = env.rpcEnv.setupEndpoint(
       HeartbeatReceiver.ENDPOINT_NAME, new HeartbeatReceiver(this))
 
     // Create and start the scheduler
+    /**
+     * TaskScheduler十分重要，
+     * (一级调度) 负责请求集群管理器给应用程序分配并运行Executor
+     * (二级调度) 任务分配给Executor执行
+     * TaskScheduler可以看作任务调度的客户端，DAGScheduler主要用于在任务正在交给TaskScheduler之前做一些准备工作，
+     *  e.g. 创建Job，将DAG中的RDD划分到不同的Stage，提交Stage等
+     */
     val (sched, ts) = SparkContext.createTaskScheduler(this, master, deployMode)
     _schedulerBackend = sched
     _taskScheduler = ts
     _dagScheduler = new DAGScheduler(this)
+    // TaskSchedulerIsSet表示已经持有taskScheduler引用，taskScheduler设置到HeartbeatReceiver的scheduler属性
     _heartbeatReceiver.ask[Boolean](TaskSchedulerIsSet)
 
     // start TaskScheduler after taskScheduler sets DAGScheduler reference in DAGScheduler's
     // constructor
+    /** TaskScheduler的启动 */
     _taskScheduler.start()
-
+    /** _applicationId是应用程序向Master注册时，Master为其创建的应用标示 */
     _applicationId = _taskScheduler.applicationId()
     _applicationAttemptId = taskScheduler.applicationAttemptId()
     _conf.set("spark.app.id", _applicationId)
@@ -507,20 +564,29 @@ class SparkContext(config: SparkConf) extends Logging {
       System.setProperty("spark.ui.proxyBase", "/proxy/" + _applicationId)
     }
     _ui.foreach(_.setAppId(_applicationId))
+    /* 初始化块管理器BlickManager SparkEnv的组件之一 存储体系的所有组件和功能 */
     _env.blockManager.initialize(_applicationId)
 
     // The metrics system for Driver need to be set spark.app.id to app ID.
     // So it should start after we get app ID from the task scheduler and set spark.app.id.
+    // 度量系统的启动
     _env.metricsSystem.start()
     // Attach the driver metrics servlet handler to the web ui after the metrics system is started.
+    // 度量系统启动后，ServletContextHandler添加到SparkUI
     _env.metricsSystem.getServletHandlers.foreach(handler => ui.foreach(_.attachHandler(handler)))
 
+    /**
+     * 时间日志监听器是将时间持久到存储的监听器，是SparkContext中的可选组件。
+     * spark.eventLog.enabled=true时启用
+     */
     _eventLogger =
       if (isEventLogEnabled) {
         val logger =
           new EventLoggingListener(_applicationId, _applicationAttemptId, _eventLogDir.get,
             _conf, _hadoopConfiguration)
         logger.start()
+        // EventLoggingListener也参与到对事件总线中事件的监听器中，并将感兴趣的事件记录到日志中
+        // e.g. SparkListenerBlockManagerRemoved事件
         listenerBus.addToEventLogQueue(logger)
         Some(logger)
       } else {
@@ -528,8 +594,15 @@ class SparkContext(config: SparkConf) extends Logging {
       }
 
     // Optionally scale number of executors dynamically based on workload. Exposed for testing.
+    /**
+     * DynamicAllocationManager是基于工作负载动态分配和删除Executor的代理
+     * 会定时根据工作负载计算所需的Executor计算所需的Executor数量
+     * 需求少则删除，需求多则申请。定时向集群管理器申请移除过期的Executor
+     */
     val dynamicAllocationEnabled = Utils.isDynamicAllocationEnabled(_conf)
     _executorAllocationManager =
+      // schedulerBackend实现了ExecutorAllocationClient的情况下，才会创建ExecutorAllocationManager
+      // 只有CoarseGrainedSchedulerBackEnd
       if (dynamicAllocationEnabled) {
         schedulerBackend match {
           case b: ExecutorAllocationClient =>
@@ -543,7 +616,8 @@ class SparkContext(config: SparkConf) extends Logging {
         None
       }
     _executorAllocationManager.foreach(_.start())
-
+    // ContextCleaner用于清理那些超出应用范围的RDD、Shuffle对应的map任务状态、
+    // Shuffle元数据、Broadcast对象以及RDD的CheckPoint数据
     _cleaner =
       if (_conf.getBoolean("spark.cleaner.referenceTracking", true)) {
         Some(new ContextCleaner(this))
@@ -554,10 +628,12 @@ class SparkContext(config: SparkConf) extends Logging {
 
     setupAndStartListenerBus()
     postEnvironmentUpdate()
+    // 向事件总线投递SparkListenerApplicationStart事件
     postApplicationStart()
 
     // Post init
-    _taskScheduler.postStartHook()
+    _taskScheduler.postStartHook() // 等待SchedulerBackend准备完成
+    // 向度量系统注册DAGScheduler、BlockManagerSource、ExecutorAllocationManagerSource
     _env.metricsSystem.registerSource(_dagScheduler.metricsSource)
     _env.metricsSystem.registerSource(new BlockManagerSource(_env.blockManager))
     _executorAllocationManager.foreach { e =>
@@ -567,6 +643,7 @@ class SparkContext(config: SparkConf) extends Logging {
     // Make sure the context is stopped if the user forgets about it. This avoids leaving
     // unfinished event logs around after the JVM exits cleanly. It doesn't help if the JVM
     // is killed, though.
+    // 添加SparkContext关闭的钩子，使得JVM推出之前调用stop()方法
     logDebug("Adding shutdown hook") // force eager creation of logger
     _shutdownHookRef = ShutdownHookManager.addShutdownHook(
       ShutdownHookManager.SPARK_CONTEXT_SHUTDOWN_PRIORITY) { () =>
@@ -611,9 +688,9 @@ class SparkContext(config: SparkConf) extends Logging {
         None
     }
   }
-
+  // 得到全部本地配置
   private[spark] def getLocalProperties: Properties = localProperties.get()
-
+  // 设置全部本地配置
   private[spark] def setLocalProperties(props: Properties) {
     localProperties.set(props)
   }
@@ -628,9 +705,11 @@ class SparkContext(config: SparkConf) extends Logging {
    * may have unexpected consequences when working with thread pools. The standard java
    * implementation of thread pools have worker threads spawn other worker threads.
    * As a result, local properties may propagate unpredictably.
+   * 设置本地配置(单个)
    */
   def setLocalProperty(key: String, value: String) {
     if (value == null) {
+      // value为null,删除key
       localProperties.get.remove(key)
     } else {
       localProperties.get.setProperty(key, value)
@@ -640,11 +719,14 @@ class SparkContext(config: SparkConf) extends Logging {
   /**
    * Get a local property set in this thread, or null if it is missing. See
    * `org.apache.spark.SparkContext.setLocalProperty`.
+   * 设置单个本地配置
    */
   def getLocalProperty(key: String): String =
     Option(localProperties.get).map(_.getProperty(key)).orNull
 
-  /** Set a human readable description of the current job. */
+  /** Set a human readable description of the current job.
+   * 设置当前job的可读性描述
+   */
   def setJobDescription(value: String) {
     setLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION, value)
   }
@@ -683,7 +765,9 @@ class SparkContext(config: SparkConf) extends Logging {
     setLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL, interruptOnCancel.toString)
   }
 
-  /** Clear the current thread's job group ID and its description. */
+  /** Clear the current thread's job group ID and its description.
+   * 清除当前线程的job的分区id和它的可读性描述
+   */
   def clearJobGroup() {
     setLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION, null)
     setLocalProperty(SparkContext.SPARK_JOB_GROUP_ID, null)
@@ -1483,9 +1567,11 @@ class SparkContext(config: SparkConf) extends Logging {
    * @return `Broadcast` object, a read-only variable cached on each machine
    */
   def broadcast[T: ClassTag](value: T): Broadcast[T] = {
-    assertNotStopped()
+    assertNotStopped() // 断言SparkContext未停止
+    // 不可以广播RDD
     require(!classOf[RDD[_]].isAssignableFrom(classTag[T].runtimeClass),
       "Can not directly broadcast RDDs; instead, call collect() and broadcast the result.")
+    // 本质调用了SparkEnv的子组建BroadcastManager的newBroadcast()生成广播对象。
     val bc = env.broadcastManager.newBroadcast[T](value, isLocal)
     val callSite = getCallSite
     logInfo("Created broadcast " + bc.id + " from " + callSite.shortForm)
@@ -1577,6 +1663,7 @@ class SparkContext(config: SparkConf) extends Logging {
   /**
    * :: DeveloperApi ::
    * Register a listener to receive up-calls from events that happen during execution.
+   * 用于向LiveListenerBus中添加实现了Trait SparkListenerInterface的监听器
    */
   @DeveloperApi
   def addSparkListener(listener: SparkListenerInterface) {
@@ -2041,7 +2128,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * @param rdd target RDD to run tasks on
    * @param func a function to run on each partition of the RDD
    * @param partitions set of partitions to run on; some jobs may not want to compute on all
-   * partitions of the target RDD, e.g. for operations like `first()`
+   * partitions of the target RDD, e.g. for operations like `first()` 运行job的分区，但是一些任务不会占用所有分区
    * @param resultHandler callback to pass each result to
    */
   def runJob[T, U: ClassTag](
@@ -2058,8 +2145,10 @@ class SparkContext(config: SparkConf) extends Logging {
     if (conf.getBoolean("spark.logLineage", false)) {
       logInfo("RDD's recursive dependencies:\n" + rdd.toDebugString)
     }
+    // 1) 将构建好的RDD提交给DAGScheduler进行调度
     dagScheduler.runJob(rdd, cleanedFunc, partitions, callSite, resultHandler, localProperties.get)
     progressBar.foreach(_.finishAll())
+    // 2) 保存检查点
     rdd.doCheckpoint()
   }
 
@@ -2329,6 +2418,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
   /**
    * Set the directory under which RDDs are going to be checkpointed.
+   * 给RDD指定检查点的目录，是启动检查点机制的前提
    * @param directory path to the directory where checkpoint files will be stored
    * (must be HDFS path if running in cluster)
    */
@@ -2366,9 +2456,9 @@ class SparkContext(config: SparkConf) extends Logging {
    * The reasons for this are discussed in https://github.com/mesos/spark/pull/718
    */
   def defaultMinPartitions: Int = math.min(defaultParallelism, 2)
-
+  // 原子类，用于生成下一个Shuffle的身份标示
   private val nextShuffleId = new AtomicInteger(0)
-
+  // 原子类，用于生成下一个RDD的身份标示
   private[spark] def newShuffleId(): Int = nextShuffleId.getAndIncrement()
 
   private val nextRddId = new AtomicInteger(0)
@@ -2384,7 +2474,9 @@ class SparkContext(config: SparkConf) extends Logging {
   private def setupAndStartListenerBus(): Unit = {
     try {
       conf.get(EXTRA_LISTENERS).foreach { classNames =>
+        // 获取SparkListener的类名
         val listeners = Utils.loadExtensions(classOf[SparkListenerInterface], classNames, conf)
+        // 通过反射生成获取SparkListener的实例，并添加到事件总线的监听器列表中
         listeners.foreach { listener =>
           listenerBus.addToSharedQueue(listener)
           logInfo(s"Registered listener ${listener.getClass().getName()}")
@@ -2398,7 +2490,7 @@ class SparkContext(config: SparkConf) extends Logging {
           throw new SparkException(s"Exception when registering SparkListener", e)
         }
     }
-
+    // 启动事件总线，并将_listenerBusStarted设为true
     listenerBus.start(this, _env.metricsSystem)
     _listenerBusStarted = true
   }
@@ -2422,8 +2514,10 @@ class SparkContext(config: SparkConf) extends Logging {
       val schedulingMode = getSchedulingMode.toString
       val addedJarPaths = addedJars.keys.toSeq
       val addedFilePaths = addedFiles.keys.toSeq
+      // 将JVM参数、Spark属性、系统属性、classPath等信息设置为环境明细信息
       val environmentDetails = SparkEnv.environmentDetails(conf, schedulingMode, addedJarPaths,
         addedFilePaths)
+      // 生成SparkListenerEnvironmentUpdate事件，并投递到事件总线
       val environmentUpdate = SparkListenerEnvironmentUpdate(environmentDetails)
       listenerBus.post(environmentUpdate)
     }
@@ -2717,9 +2811,10 @@ object SparkContext extends Logging {
       sc: SparkContext,
       master: String,
       deployMode: String): (SchedulerBackend, TaskScheduler) = {
-    import SparkMasterRegex._
+    import SparkMasterRegex._ // master的正则匹配
 
     // When running locally, don't try to re-execute tasks on failure.
+    // 本地运行是，失败时不重试
     val MAX_LOCAL_TASK_FAILURES = 1
 
     master match {
@@ -2728,7 +2823,7 @@ object SparkContext extends Logging {
         val backend = new LocalSchedulerBackend(sc.getConf, scheduler, 1)
         scheduler.initialize(backend)
         (backend, scheduler)
-
+      /*  local[N] */
       case LOCAL_N_REGEX(threads) =>
         def localCpuCount: Int = Runtime.getRuntime.availableProcessors()
         // local[*] estimates the number of cores on the machine; local[N] uses exactly N threads.
@@ -2740,7 +2835,7 @@ object SparkContext extends Logging {
         val backend = new LocalSchedulerBackend(sc.getConf, scheduler, threadCount)
         scheduler.initialize(backend)
         (backend, scheduler)
-
+      /*  local[N, maxRetries] */
       case LOCAL_N_FAILURES_REGEX(threads, maxFailures) =>
         def localCpuCount: Int = Runtime.getRuntime.availableProcessors()
         // local[*, M] means the number of cores on the computer with M failures

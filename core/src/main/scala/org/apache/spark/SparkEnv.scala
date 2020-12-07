@@ -55,28 +55,30 @@ import org.apache.spark.util.{RpcUtils, Utils}
  */
 @DeveloperApi
 class SparkEnv (
-    val executorId: String,
-    private[spark] val rpcEnv: RpcEnv,
+    val executorId: String, // executor的id
+    private[spark] val rpcEnv: RpcEnv, // rpc环境
     val serializer: Serializer,
-    val closureSerializer: Serializer,
-    val serializerManager: SerializerManager,
-    val mapOutputTracker: MapOutputTracker,
-    val shuffleManager: ShuffleManager,
-    val broadcastManager: BroadcastManager,
-    val blockManager: BlockManager,
-    val securityManager: SecurityManager,
-    val metricsSystem: MetricsSystem,
-    val memoryManager: MemoryManager,
-    val outputCommitCoordinator: OutputCommitCoordinator,
-    val conf: SparkConf) extends Logging {
+    val closureSerializer: Serializer, // 关闭序列化
+    val serializerManager: SerializerManager, // 序列化管理器
+    val mapOutputTracker: MapOutputTracker, // map任务输出跟踪器
+    val shuffleManager: ShuffleManager, // shuffle的管理器
+    val broadcastManager: BroadcastManager, // 广播的管理器
+    val blockManager: BlockManager, // 存储管理器
+    val securityManager: SecurityManager, // 安全管理器
+    val metricsSystem: MetricsSystem, // 监控系统
+    val memoryManager: MemoryManager, // 内存管理器
+    val outputCommitCoordinator: OutputCommitCoordinator, // 输出提交协调器
+    val conf: SparkConf /* Spark参数 */) extends Logging {
 
-  @volatile private[spark] var isStopped = false
+  @volatile private[spark] var isStopped = false /* 当前SparkEnv是否停止的状态 */
+  /* 所有python实现的Worker缓存 */
   private val pythonWorkers = mutable.HashMap[(String, Map[String, String]), PythonWorkerFactory]()
 
   // A general, soft-reference map for metadata needed during HadoopRDD split computation
   // (e.g., HadoopFileRDD uses this to cache JobConfs and InputFormats).
+  /* HadoopRDD进行任务切分时所需要的元数据的软引用 */
   private[spark] val hadoopJobMetadata = new MapMaker().softValues().makeMap[String, Any]()
-
+  /* 如果当前SparkEnv处于Driver实例子中，那么将创建Driver的临时目录 */
   private[spark] var driverTmpDir: Option[String] = None
 
   private[spark] def stop() {
@@ -154,6 +156,9 @@ object SparkEnv extends Logging {
 
   /**
    * Create a SparkEnv for the driver.
+   * 此方法将为Driver创建SparkEnv,调用createSparkEnv创建SparkEnv后，
+   * SparkEnv的实例的引用将通过SparkEnv的set方法设置到SparkEnv object的env属性中
+   * 任务需要SparkEnv，[[SparkEnv.get()]]就可以
    */
   private[spark] def createDriverEnv(
       conf: SparkConf,
@@ -164,14 +169,17 @@ object SparkEnv extends Logging {
     assert(conf.contains(DRIVER_HOST_ADDRESS),
       s"${DRIVER_HOST_ADDRESS.key} is not set on the driver!")
     assert(conf.contains("spark.driver.port"), "spark.driver.port is not set on the driver!")
-    val bindAddress = conf.get(DRIVER_BIND_ADDRESS)
+    val bindAddress = conf.get(DRIVER_BIND_ADDRESS) // Driver实例的host
+    /** Driver实例对外宣称的host，可以通过spark.driver.host或[[Utils.localHostName]] **/
     val advertiseAddress = conf.get(DRIVER_HOST_ADDRESS)
-    val port = conf.get("spark.driver.port").toInt
+    val port = conf.get("spark.driver.port").toInt // Driver实例的port
+    /** I/O加密的密钥。当spark.io.encryption.enabled=true,[[CryptoStreamUtils.createKey]] */
     val ioEncryptionKey = if (conf.get(IO_ENCRYPTION_ENABLED)) {
       Some(CryptoStreamUtils.createKey(conf))
     } else {
       None
     }
+    // 真正创建的实现
     create(
       conf,
       SparkContext.DRIVER_IDENTIFIER,
@@ -189,6 +197,8 @@ object SparkEnv extends Logging {
   /**
    * Create a SparkEnv for an executor.
    * In coarse-grained mode, the executor provides an RpcEnv that is already instantiated.
+   * 创建一个executor的SparkEnv
+   * 在粗粒度模式下，executor提供了已经实例化的RpcEnv
    */
   private[spark] def createExecutorEnv(
       conf: SparkConf,
@@ -244,7 +254,7 @@ object SparkEnv extends Logging {
           "wire.")
       }
     }
-
+    /* 生成系统名称systemName */
     val systemName = if (isDriver) driverSystemName else executorSystemName
     val rpcEnv = RpcEnv.create(systemName, bindAddress, advertiseAddress, port.getOrElse(-1), conf,
       securityManager, numUsableCores, !isDriver)
@@ -391,6 +401,7 @@ object SparkEnv extends Logging {
     // Add a reference to tmp dir created by driver, we will delete this tmp dir when stop() is
     // called, and we only need to do it for driver. Because driver may run as a service, and if we
     // don't delete this tmp dir when sc is stopped, then will create too many tmp dirs.
+    /* 如果是Driver实例，就创建临时目录 */
     if (isDriver) {
       val sparkFilesDir = Utils.createTempDir(Utils.getLocalDir(conf), "userFiles").getAbsolutePath
       envInstance.driverTmpDir = Some(sparkFilesDir)

@@ -41,13 +41,19 @@ private[netty] case object OnStart extends InboxMessage
 
 private[netty] case object OnStop extends InboxMessage
 
-/** A message to tell all endpoints that a remote process has connected. */
+/** A message to tell all endpoints that a remote process has connected.
+ * 告诉所有endpoints,一个远程进程连接了
+ */
 private[netty] case class RemoteProcessConnected(remoteAddress: RpcAddress) extends InboxMessage
 
-/** A message to tell all endpoints that a remote process has disconnected. */
+/** A message to tell all endpoints that a remote process has disconnected.
+ * 告诉所有endpoints,一个远程进程断开连接了
+ */
 private[netty] case class RemoteProcessDisconnected(remoteAddress: RpcAddress) extends InboxMessage
 
-/** A message to tell all endpoints that a network error has happened. */
+/** A message to tell all endpoints that a network error has happened.
+ * 告诉所有endpoints,发生了一个网络错误
+ */
 private[netty] case class RemoteProcessConnectionError(cause: Throwable, remoteAddress: RpcAddress)
   extends InboxMessage
 

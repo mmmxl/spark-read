@@ -25,6 +25,7 @@ import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 /**
  * A mutable wrapper that makes two rows appear as a single concatenated row.  Designed to
  * be instantiated once per thread and reused.
+ * 2rows->1row的包装器，一个线程内重复使用
  */
 class JoinedRow extends InternalRow {
   private[this] var row1: InternalRow = _
@@ -43,7 +44,7 @@ class JoinedRow extends InternalRow {
     this
   }
 
-  /** Updates this JoinedRow by updating its left base row.  Returns itself. */
+  /** Updates this JoinedRow by updating its left base row.  Returns itself. 更改row1 */
   def withLeft(newLeft: InternalRow): JoinedRow = {
     row1 = newLeft
     this
@@ -63,6 +64,9 @@ class JoinedRow extends InternalRow {
 
   override def numFields: Int = row1.numFields + row2.numFields
 
+  /**
+   * [0, ..., row1.numFields-1, row1.numFields, ..., row1.numFields + row2.size-1 ]
+   */
   override def get(i: Int, dt: DataType): AnyRef =
     if (i < row1.numFields) row1.get(i, dt) else row2.get(i - row1.numFields, dt)
 

@@ -35,6 +35,10 @@ import org.apache.spark.util.Utils
 
 /**
  * Top level user interface for a Spark application.
+ * Spark应用程序的顶级用户接口
+ * WebUI:网页UI基类，UI的基本方法
+ * Logging:日志打印功能
+ * UIRoot:提供了暴露应用信息为json的接口
  */
 private[spark] class SparkUI private (
     val store: AppStatusStore,
@@ -49,15 +53,19 @@ private[spark] class SparkUI private (
     conf, basePath, "SparkUI")
   with Logging
   with UIRoot {
-
+  // 是否提供杀死Stage或者Job的连接
   val killEnabled = sc.map(_.conf.getBoolean("spark.ui.killEnabled", true)).getOrElse(false)
 
   var appId: String = _
 
+  // 流程序监听器 SparkStreaming  SparkStructStreaming用
   private var streamingJobProgressListener: Option[SparkListener] = None
 
-  /** Initialize all components of the server. */
+  /** Initialize all components of the server.
+   * 初始化服务的所有组件
+   */
   def initialize(): Unit = {
+    // 1.构造页面布局比哦那个给每个WebUITab中的所有WebUIPage创建对应的ServletContextHandler
     val jobsTab = new JobsTab(this, store)
     attachTab(jobsTab)
     val stagesTab = new StagesTab(this, store)
@@ -65,7 +73,10 @@ private[spark] class SparkUI private (
     attachTab(new StorageTab(this, store))
     attachTab(new EnvironmentTab(this, store))
     attachTab(new ExecutorsTab(this))
+    // 2.调用JettyUtils的createRedirectHandler方法创建对静态目录`org/apache/spark/ui/static`提供文件服务的ServletContextHandler
     addStaticHandler(SparkUI.STATIC_RESOURCE_DIR)
+    // 3.调用JettyUtils的createRedirectHandler方法创建几个将用户对源路径的请求重定向到目标路径的ServletContextHandler
+    //   e.g. 用户对根路径"/"的请求重定向到目标木锯"/jobs/"的ServletContextHandler
     attachHandler(createRedirectHandler("/", "/jobs/", basePath = basePath))
     attachHandler(ApiRootResource.getServletHandler(this))
 
@@ -77,8 +88,9 @@ private[spark] class SparkUI private (
       httpMethods = Set("GET", "POST")))
   }
 
-  initialize()
+  initialize() // 初始化
 
+  // Spark用户
   def getSparkUser: String = {
     try {
       Option(store.applicationInfo().attempts.head.sparkUser)
@@ -89,18 +101,23 @@ private[spark] class SparkUI private (
     }
   }
 
+  // 得到appName
   def getAppName: String = appName
 
+  // 设置appId
   def setAppId(id: String): Unit = {
     appId = id
   }
 
-  /** Stop the server behind this web interface. Only valid after bind(). */
+  /** Stop the server behind this web interface. Only valid after bind().
+   *  停止Jetty服务
+   */
   override def stop() {
     super.stop()
     logInfo(s"Stopped Spark web UI at $webUrl")
   }
 
+  // 柯里化，根据appId获取SparkUI并且得到一个参数为 Spark=>T 函数的函数
   override def withSparkUI[T](appId: String, attemptId: Option[String])(fn: SparkUI => T): T = {
     if (appId == this.appId) {
       fn(this)
@@ -109,6 +126,7 @@ private[spark] class SparkUI private (
     }
   }
 
+  // 获取应用信息的list
   def getApplicationInfoList: Iterator[ApplicationInfo] = {
     Iterator(new ApplicationInfo(
       id = appId,
@@ -130,16 +148,20 @@ private[spark] class SparkUI private (
     ))
   }
 
+  // 得到对应ApplicationId对应的应用信息
   def getApplicationInfo(appId: String): Option[ApplicationInfo] = {
     getApplicationInfoList.find(_.id == appId)
   }
 
+  // 得到流程序监听器 SparkStreaming  SparkStructStreaming用
   def getStreamingJobProgressListener: Option[SparkListener] = streamingJobProgressListener
 
+  // 设置流程序监听器 SparkStreaming  SparkStructStreaming用
   def setStreamingJobProgressListener(sparkListener: SparkListener): Unit = {
     streamingJobProgressListener = Option(sparkListener)
   }
 
+  // 清除流程序监听器 SparkStreaming  SparkStructStreaming用
   def clearStreamingJobProgressListener(): Unit = {
     streamingJobProgressListener = None
   }

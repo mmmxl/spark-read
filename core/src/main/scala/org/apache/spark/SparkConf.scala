@@ -46,17 +46,18 @@ import org.apache.spark.util.Utils
  * `new SparkConf().setMaster("local").setAppName("My app")`.
  *
  * @param loadDefaults whether to also load values from Java system properties
- *
  * @note Once a SparkConf object is passed to Spark, it is cloned and can no longer be modified
- * by the user. Spark does not support modifying the configuration at runtime.
+ *       by the user. Spark does not support modifying the configuration at runtime.
  */
 /**
  * 继承了Cloneable:可以被克隆
  * 混入了Cloneable:slf4j和log4j一系列封装方法
  * 混入了Serializable:可以被序列化
+ *
  * @param loadDefaults 是否从本地Java系统配置中加载
  */
 class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Serializable {
+
   import SparkConf._ // 导入静态对象下所有属性和方法
 
   /** Create a SparkConf that loads defaults from system properties and the classpath */
@@ -66,11 +67,12 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
   /**
    * 这个变量很重要，一个支持并发的Map，存放了配置，有3个来源：
    *  1.来源于系统参数(即使用System.getProperties)中以spark.作为前缀的那部分属性[[loadFromSystemProperties]]
-   *  2.使用SparkConf的[[set()]]API进行设置
+   *  2.使用SparkConf的[[set()]]API进行设置 [[set()]]
    *  3.从其他SparkConf克隆
    */
   private val settings = new ConcurrentHashMap[String, String]()
 
+  /** 配置的读取器 */
   @transient private lazy val reader: ConfigReader = {
     val _reader = new ConfigReader(new SparkConfigProvider(settings))
     _reader.bindEnv(new ConfigProvider {
@@ -95,12 +97,14 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
     this
   }
 
-  /** Set a configuration variable. silent:沉默 */
+  /** Set a configuration variable. silent:沉默
+   * setMaster，setAppName等都是通过调用这个方法来完成的
+   */
   def set(key: String, value: String): SparkConf = {
     set(key, value, false)
   }
 
-  private[spark] def set(key: String, value: String, silent: Boolean): SparkConf = {
+  private[spark] def set(key: String, value: String, silent: Boolean /* 是否报warn */): SparkConf = {
     if (key == null) {
       throw new NullPointerException("null key")
     }
@@ -130,19 +134,26 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
   /**
    * The master URL to connect to, such as "local" to run locally with one thread, "local[4]" to
    * run locally with 4 cores, or "spark://master:7077" to run on a Spark standalone cluster.
+   * 设置Spark的部署模式
    */
   def setMaster(master: String): SparkConf = {
     set("spark.master", master)
   }
 
-  /** Set a name for your application. Shown in the Spark web UI. */
+  /** Set a name for your application. Shown in the Spark web UI.
+   *  设置应用的名字，将在Spark web UI中展示
+   */
   def setAppName(name: String): SparkConf = {
     set("spark.app.name", name)
   }
 
-  /** Set JAR files to distribute to the cluster. */
+  /** Set JAR files to distribute to the cluster.
+   * 设置jar路径分发到集群
+   */
   def setJars(jars: Seq[String]): SparkConf = {
+    // 如果是null，打印warn日志
     for (jar <- jars if (jar == null)) logWarning("null jar passed to SparkContext constructor")
+    // 通过key为spark.jars配置jars 多个jar路径通过,分隔
     set("spark.jars", jars.filter(_ != null).mkString(","))
   }
 
@@ -155,6 +166,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
    * Set an environment variable to be used when launching executors for this application.
    * These variables are stored as properties of the form spark.executorEnv.VAR_NAME
    * (for example spark.executorEnv.PATH) but this method makes them easier to set.
+   * 设置Executor的环境变量 {{{setExecutorEnv("PATH", "...")}}}
    */
   def setExecutorEnv(variable: String, value: String): SparkConf = {
     set("spark.executorEnv." + variable, value)
@@ -164,6 +176,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
    * Set multiple environment variables to be used when launching executors.
    * These variables are stored as properties of the form spark.executorEnv.VAR_NAME
    * (for example spark.executorEnv.PATH) but this method makes them easier to set.
+   * 批量设置Executor的环境变量的API {{{setExecutorEnv(Seq(("PATH", "..."),(..., ...)) )}}}
    */
   def setExecutorEnv(variables: Seq[(String, String)]): SparkConf = {
     for ((k, v) <- variables) {
@@ -182,18 +195,23 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
 
   /**
    * Set the location where Spark is installed on worker nodes.
+   * 设置SparkHome的位置
    */
   def setSparkHome(home: String): SparkConf = {
     set("spark.home", home)
   }
 
-  /** Set multiple parameters together */
+  /** Set multiple parameters together
+   * 批量设置的API
+   */
   def setAll(settings: Traversable[(String, String)]): SparkConf = {
     settings.foreach { case (k, v) => set(k, v) }
     this
   }
 
-  /** Set a parameter if it isn't already configured */
+  /** Set a parameter if it isn't already configured
+   * 设置一个参数(不存在),存在则忽略
+   */
   def setIfMissing(key: String, value: String): SparkConf = {
     if (settings.putIfAbsent(key, value) == null) {
       logDeprecationWarning(key)
@@ -250,7 +268,9 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
       .toMap
   }
 
-  /** Remove a parameter from the configuration */
+  /** Remove a parameter from the configuration
+   * 删除一个配置
+   */
   def remove(key: String): SparkConf = {
     settings.remove(key)
     this
@@ -284,8 +304,10 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
   /**
    * Get a time parameter as seconds; throws a NoSuchElementException if it's not set. If no
    * suffix is provided then seconds are assumed.
+   * 转换时间参数(其他单位转成秒)  50s, 100ms, or 250us 没后缀，单位默认秒
+   *
    * @throws java.util.NoSuchElementException If the time parameter is not set
-   * @throws NumberFormatException If the value cannot be interpreted as seconds
+   * @throws NumberFormatException            If the value cannot be interpreted as seconds
    */
   def getTimeAsSeconds(key: String): Long = catchIllegalValue(key) {
     Utils.timeStringAsSeconds(get(key))
@@ -294,6 +316,9 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
   /**
    * Get a time parameter as seconds, falling back to a default if not set. If no
    * suffix is provided then seconds are assumed.
+   * 转换时间参数(其他单位转成秒)  50s, 100ms, or 250us 没后缀，单位默认秒
+   * 这个方法提供默认值
+   *
    * @throws NumberFormatException If the value cannot be interpreted as seconds
    */
   def getTimeAsSeconds(key: String, defaultValue: String): Long = catchIllegalValue(key) {
@@ -303,8 +328,10 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
   /**
    * Get a time parameter as milliseconds; throws a NoSuchElementException if it's not set. If no
    * suffix is provided then milliseconds are assumed.
+   * 转换时间参数(其他单位转成毫秒) 50s, 100ms, or 250us 没后缀，单位默认毫秒
+   *
    * @throws java.util.NoSuchElementException If the time parameter is not set
-   * @throws NumberFormatException If the value cannot be interpreted as milliseconds
+   * @throws NumberFormatException            If the value cannot be interpreted as milliseconds
    */
   def getTimeAsMs(key: String): Long = catchIllegalValue(key) {
     Utils.timeStringAsMs(get(key))
@@ -313,6 +340,9 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
   /**
    * Get a time parameter as milliseconds, falling back to a default if not set. If no
    * suffix is provided then milliseconds are assumed.
+   * 转换时间参数(其他单位转成毫秒) 50s, 100ms, or 250us 没后缀，单位默认毫秒
+   * 这个方法提供默认值
+   *
    * @throws NumberFormatException If the value cannot be interpreted as milliseconds
    */
   def getTimeAsMs(key: String, defaultValue: String): Long = catchIllegalValue(key) {
@@ -322,8 +352,11 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
   /**
    * Get a size parameter as bytes; throws a NoSuchElementException if it's not set. If no
    * suffix is provided then bytes are assumed.
+   * 转换容量参数(其他单位转Bytes) 50b, 100k, or 250m 没后缀，单位默认Bytes
+   * 这个方法提供默认值
+   *
    * @throws java.util.NoSuchElementException If the size parameter is not set
-   * @throws NumberFormatException If the value cannot be interpreted as bytes
+   * @throws NumberFormatException            If the value cannot be interpreted as bytes
    */
   def getSizeAsBytes(key: String): Long = catchIllegalValue(key) {
     Utils.byteStringAsBytes(get(key))
@@ -332,6 +365,9 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
   /**
    * Get a size parameter as bytes, falling back to a default if not set. If no
    * suffix is provided then bytes are assumed.
+   * 转换容量参数(其他单位转Bytes) 50b, 100k, or 250m 没后缀，单位默认Bytes
+   * 这个方法提供默认值
+   *
    * @throws NumberFormatException If the value cannot be interpreted as bytes
    */
   def getSizeAsBytes(key: String, defaultValue: String): Long = catchIllegalValue(key) {
@@ -340,6 +376,9 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
 
   /**
    * Get a size parameter as bytes, falling back to a default if not set.
+   * 转换容量参数(其他单位转Bytes) 50b, 100k, or 250m 没后缀，单位默认Bytes
+   * 这个方法提供默认值
+   *
    * @throws NumberFormatException If the value cannot be interpreted as bytes
    */
   def getSizeAsBytes(key: String, defaultValue: Long): Long = catchIllegalValue(key) {
@@ -349,8 +388,10 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
   /**
    * Get a size parameter as Kibibytes; throws a NoSuchElementException if it's not set. If no
    * suffix is provided then Kibibytes are assumed.
+   * 转换容量参数(其他单位转KB) 50b, 100k, or 250m 没后缀，单位默认KB
+   *
    * @throws java.util.NoSuchElementException If the size parameter is not set
-   * @throws NumberFormatException If the value cannot be interpreted as Kibibytes
+   * @throws NumberFormatException            If the value cannot be interpreted as Kibibytes
    */
   def getSizeAsKb(key: String): Long = catchIllegalValue(key) {
     Utils.byteStringAsKb(get(key))
@@ -359,6 +400,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
   /**
    * Get a size parameter as Kibibytes, falling back to a default if not set. If no
    * suffix is provided then Kibibytes are assumed.
+   *
    * @throws NumberFormatException If the value cannot be interpreted as Kibibytes
    */
   def getSizeAsKb(key: String, defaultValue: String): Long = catchIllegalValue(key) {
@@ -368,8 +410,10 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
   /**
    * Get a size parameter as Mebibytes; throws a NoSuchElementException if it's not set. If no
    * suffix is provided then Mebibytes are assumed.
+   * 转换容量参数(其他单位转Mb) 50b, 100k, or 250m 没后缀，单位默认Mb
+   *
    * @throws java.util.NoSuchElementException If the size parameter is not set
-   * @throws NumberFormatException If the value cannot be interpreted as Mebibytes
+   * @throws NumberFormatException            If the value cannot be interpreted as Mebibytes
    */
   def getSizeAsMb(key: String): Long = catchIllegalValue(key) {
     Utils.byteStringAsMb(get(key))
@@ -378,6 +422,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
   /**
    * Get a size parameter as Mebibytes, falling back to a default if not set. If no
    * suffix is provided then Mebibytes are assumed.
+   *
    * @throws NumberFormatException If the value cannot be interpreted as Mebibytes
    */
   def getSizeAsMb(key: String, defaultValue: String): Long = catchIllegalValue(key) {
@@ -387,8 +432,10 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
   /**
    * Get a size parameter as Gibibytes; throws a NoSuchElementException if it's not set. If no
    * suffix is provided then Gibibytes are assumed.
+   * 转换容量参数(其他单位转Gb) 50b, 100k, or 250m 没后缀，单位默认Gb
+   *
    * @throws java.util.NoSuchElementException If the size parameter is not set
-   * @throws NumberFormatException If the value cannot be interpreted as Gibibytes
+   * @throws NumberFormatException            If the value cannot be interpreted as Gibibytes
    */
   def getSizeAsGb(key: String): Long = catchIllegalValue(key) {
     Utils.byteStringAsGb(get(key))
@@ -397,6 +444,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
   /**
    * Get a size parameter as Gibibytes, falling back to a default if not set. If no
    * suffix is provided then Gibibytes are assumed.
+   *
    * @throws NumberFormatException If the value cannot be interpreted as Gibibytes
    */
   def getSizeAsGb(key: String, defaultValue: String): Long = catchIllegalValue(key) {
@@ -413,13 +461,16 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
     getOption(key).map(reader.substitute(_))
   }
 
-  /** Get all parameters as a list of pairs */
+  /** Get all parameters as a list of pairs
+   * 读取setting全部值
+   */
   def getAll: Array[(String, String)] = {
     settings.entrySet().asScala.map(x => (x.getKey, x.getValue)).toArray
   }
 
   /**
    * Get all parameters that start with `prefix`
+   * setting中对应前缀的值 返回的key删去了前缀
    */
   def getAllWithPrefix(prefix: String): Array[(String, String)] = {
     getAll.filter { case (k, v) => k.startsWith(prefix) }
@@ -429,6 +480,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
 
   /**
    * Get a parameter as an integer, falling back to a default if not set
+   *
    * @throws NumberFormatException If the value cannot be interpreted as an integer
    */
   def getInt(key: String, defaultValue: Int): Int = catchIllegalValue(key) {
@@ -437,6 +489,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
 
   /**
    * Get a parameter as a long, falling back to a default if not set
+   *
    * @throws NumberFormatException If the value cannot be interpreted as a long
    */
   def getLong(key: String, defaultValue: Long): Long = catchIllegalValue(key) {
@@ -445,6 +498,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
 
   /**
    * Get a parameter as a double, falling back to a default if not ste
+   *
    * @throws NumberFormatException If the value cannot be interpreted as a double
    */
   def getDouble(key: String, defaultValue: Double): Double = catchIllegalValue(key) {
@@ -453,13 +507,16 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
 
   /**
    * Get a parameter as a boolean, falling back to a default if not set
+   *
    * @throws IllegalArgumentException If the value cannot be interpreted as a boolean
    */
   def getBoolean(key: String, defaultValue: Boolean): Boolean = catchIllegalValue(key) {
     getOption(key).map(_.toBoolean).getOrElse(defaultValue)
   }
 
-  /** Get all executor environment variables set on this SparkConf */
+  /** Get all executor environment variables set on this SparkConf
+   * 得到所有Executor的环境变量
+   */
   def getExecutorEnv: Seq[(String, String)] = {
     getAllWithPrefix("spark.executorEnv.")
   }
@@ -467,6 +524,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
   /**
    * Returns the Spark application id, valid in the Driver after TaskScheduler registration and
    * from the start in the Executor.
+   * 应用id，在任务调度器注册之后并且在Executor启动
    */
   def getAppId: String = get("spark.app.id")
 
@@ -480,7 +538,8 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
 
   /** Copy this object */
   override def clone: SparkConf = {
-    val cloned = new SparkConf(false)
+    val cloned = new SparkConf(false) // 这里不从本地系统配置文件和类路径了
+    // 遍历setting以复制
     settings.entrySet().asScala.foreach { e =>
       cloned.set(e.getKey(), e.getValue(), true)
     }
@@ -490,6 +549,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
   /**
    * By using this instead of System.getenv(), environment variables can be mocked
    * in unit tests.
+   * 获取系统环境变量
    */
   private[spark] def getenv(name: String): String = System.getenv(name)
 
@@ -497,6 +557,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
    * Wrapper method for get() methods which require some specific value format. This catches
    * any [[NumberFormatException]] or [[IllegalArgumentException]] and re-raises it with the
    * incorrectly configured key in the exception message.
+   * 包装方法，可以处理异常 getValue()是getInt()等
    */
   private def catchIllegalValue[T](key: String)(getValue: => T): T = {
     try {
@@ -505,7 +566,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
       case e: NumberFormatException =>
         // NumberFormatException doesn't have a constructor that takes a cause for some reason.
         throw new NumberFormatException(s"Illegal value for config key $key: ${e.getMessage}")
-            .initCause(e)
+          .initCause(e)
       case e: IllegalArgumentException =>
         throw new IllegalArgumentException(s"Illegal value for config key $key: ${e.getMessage}", e)
     }
@@ -514,6 +575,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
   /**
    * Checks for illegal or deprecated config settings. Throws an exception for the former. Not
    * idempotent - may mutate this conf object to convert deprecated settings to supported ones.
+   * 参数的使用提示
    */
   private[spark] def validateSettings() {
     if (contains("spark.local.dir")) {
@@ -534,10 +596,10 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
     sys.props.get("spark.driver.libraryPath").foreach { value =>
       val warning =
         s"""
-          |spark.driver.libraryPath was detected (set to '$value').
-          |This is deprecated in Spark 1.2+.
-          |
-          |Please instead use: $driverLibraryPathKey
+           |spark.driver.libraryPath was detected (set to '$value').
+           |This is deprecated in Spark 1.2+.
+           |
+           |Please instead use: $driverLibraryPathKey
         """.stripMargin
       logWarning(warning)
     }
@@ -642,6 +704,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
   /**
    * Return a string listing all keys and values, one per line. This is useful to print the
    * configuration out for debugging.
+   * 打印出key-value，用于debug
    */
   def toDebugString: String = {
     Utils.redact(this, getAll).sorted.map { case (k, v) => k + "=" + v }.mkString("\n")
@@ -649,6 +712,9 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
 
 }
 
+/**
+ * SparkConf的静态属性和方法，类似java的static
+ */
 private[spark] object SparkConf extends Logging {
 
   /**
@@ -656,12 +722,13 @@ private[spark] object SparkConf extends Logging {
    *
    * The extra information is logged as a warning when the config is present in the user's
    * configuration.
+   * 过时配置的Map DeprecatedConfig(key, 过期版本, warn信息)
    */
   private val deprecatedConfigs: Map[String, DeprecatedConfig] = {
     val configs = Seq(
       DeprecatedConfig("spark.cache.class", "0.8",
         "The spark.cache.class property is no longer being used! Specify storage levels using " +
-        "the RDD.persist() method instead."),
+          "the RDD.persist() method instead."),
       DeprecatedConfig("spark.yarn.user.classpath.first", "1.3",
         "Please use spark.{driver,executor}.userClassPathFirst instead."),
       DeprecatedConfig("spark.kryoserializer.buffer.mb", "1.4",
@@ -679,7 +746,7 @@ private[spark] object SparkConf extends Logging {
       DeprecatedConfig("spark.yarn.credentials.file.retention.days", "2.4.0", "Not used anymore.")
     )
 
-    Map(configs.map { cfg => (cfg.key -> cfg) } : _*)
+    Map(configs.map { cfg => (cfg.key -> cfg) }: _*) // _* scala的语法，表示取出容器中全部元素逐个放入
   }
 
   /**
@@ -689,6 +756,9 @@ private[spark] object SparkConf extends Logging {
    * present in the user's configuration, a warning is logged.
    *
    * TODO: consolidate it with `ConfigBuilder.withAlternative`.
+   * 备用参数的Map
+   * Map(当前版本的key -> Seq(AlternateConfig))
+   * AlternateConfig(旧key, 过期版本)
    */
   private val configsWithAlternatives = Map[String, Seq[AlternateConfig]](
     "spark.executor.userClassPathFirst" -> Seq(
@@ -767,16 +837,20 @@ private[spark] object SparkConf extends Logging {
    *
    * Certain authentication configs are required from the executor when it connects to
    * the scheduler, while the rest of the spark configs can be inherited from the driver later.
+   * 是不是Executor启动的配置信息
+   * 认证方式, rpc,网络，接口是可选的
+   * 连接调度器，spark.auth(认证方式)是必须的。其他都可以之后从driver端继承
    */
   def isExecutorStartupConf(name: String): Boolean = {
     (name.startsWith("spark.auth") && name != SecurityManager.SPARK_AUTH_SECRET_CONF) ||
-    name.startsWith("spark.rpc") ||
-    name.startsWith("spark.network") ||
-    isSparkPortConf(name)
+      name.startsWith("spark.rpc") ||
+      name.startsWith("spark.network") ||
+      isSparkPortConf(name)
   }
 
   /**
    * Return true if the given config matches either `spark.*.port` or `spark.port.*`.
+   * 判断参数是不是匹配 `spark.*.port` or `spark.port.*`
    */
   def isSparkPortConf(name: String): Boolean = {
     (name.startsWith("spark.") && name.endsWith(".port")) || name.startsWith("spark.port.")
@@ -785,6 +859,7 @@ private[spark] object SparkConf extends Logging {
   /**
    * Looks for available deprecated keys for the given config option, and return the first
    * value available.
+   * 查找当前key的可用但是不推荐使用key(只返回第一个)
    */
   def getDeprecatedConfig(key: String, conf: JMap[String, String]): Option[String] = {
     configsWithAlternatives.get(key).flatMap { alts =>
@@ -806,14 +881,14 @@ private[spark] object SparkConf extends Logging {
     deprecatedConfigs.get(key).foreach { cfg =>
       logWarning(
         s"The configuration key '$key' has been deprecated as of Spark ${cfg.version} and " +
-        s"may be removed in the future. ${cfg.deprecationMessage}")
+          s"may be removed in the future. ${cfg.deprecationMessage}")
       return
     }
 
     allAlternatives.get(key).foreach { case (newKey, cfg) =>
       logWarning(
         s"The configuration key '$key' has been deprecated as of Spark ${cfg.version} and " +
-        s"may be removed in the future. Please use the new key '$newKey' instead.")
+          s"may be removed in the future. Please use the new key '$newKey' instead.")
       return
     }
     if (key.startsWith("spark.akka") || key.startsWith("spark.ssl.akka")) {
@@ -826,25 +901,25 @@ private[spark] object SparkConf extends Logging {
   /**
    * Holds information about keys that have been deprecated and do not have a replacement.
    *
-   * @param key The deprecated key.
-   * @param version Version of Spark where key was deprecated.
+   * @param key                The deprecated key.
+   * @param version            Version of Spark where key was deprecated.
    * @param deprecationMessage Message to include in the deprecation warning.
    */
   private case class DeprecatedConfig(
-      key: String,
-      version: String,
-      deprecationMessage: String)
+                                       key: String,
+                                       version: String,
+                                       deprecationMessage: String)
 
   /**
    * Information about an alternate configuration key that has been deprecated.
    *
-   * @param key The deprecated config key.
-   * @param version The Spark version in which the key was deprecated.
+   * @param key         The deprecated config key.
+   * @param version     The Spark version in which the key was deprecated.
    * @param translation A translation function for converting old config values into new ones.
    */
   private case class AlternateConfig(
-      key: String,
-      version: String,
-      translation: String => String = null)
+                                      key: String,
+                                      version: String,
+                                      translation: String => String = null)
 
 }

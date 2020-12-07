@@ -85,6 +85,11 @@ abstract class RDD[T: ClassTag](
     logWarning("Spark does not support nested RDDs (see SPARK-5063)")
   }
 
+  /**
+   * 缺少sparkContext会抛出SparkEXception driver端未调用
+   * (1) rdd1.map(x => rdd2.values.count() * x) rdd不可以别的rdd内部执行
+   * (2) SparkStreaming job从checkpoint恢复，这个rdd没有被job运用在DStream operations
+   */
   private def sc: SparkContext = {
     if (_sc == null) {
       throw new SparkException(
@@ -100,7 +105,9 @@ abstract class RDD[T: ClassTag](
     _sc
   }
 
-  /** Construct an RDD with just a one-to-one dependency on one parent */
+  /** Construct an RDD with just a one-to-one dependency on one parent
+   * 构建一对一依赖的rdd
+   */
   def this(@transient oneParent: RDD[_]) =
     this(oneParent.context, List(new OneToOneDependency(oneParent)))
 
@@ -112,6 +119,7 @@ abstract class RDD[T: ClassTag](
   /**
    * :: DeveloperApi ::
    * Implemented by subclasses to compute a given partition.
+   * 计算给定分区
    */
   @DeveloperApi
   def compute(split: Partition, context: TaskContext): Iterator[T]
@@ -122,21 +130,27 @@ abstract class RDD[T: ClassTag](
    *
    * The partitions in this array must satisfy the following property:
    *   `rdd.partitions.zipWithIndex.forall { case (partition, index) => partition.index == index }`
+   * 返回rdd的分区，该方法只能被调用一次，所以在这里实现一个耗时的计算是安全的
+   * 满足`rdd.partitions.zipWithIndex.forall { case (partition, index) => partition.index == index }`
    */
   protected def getPartitions: Array[Partition]
 
   /**
    * Implemented by subclasses to return how this RDD depends on parent RDDs. This method will only
    * be called once, so it is safe to implement a time-consuming computation in it.
+   * 返回rdd的血缘，该方法只能被调用一次，所以在这里实现一个耗时的计算是安全的
    */
   protected def getDependencies: Seq[Dependency[_]] = deps
 
   /**
    * Optionally overridden by subclasses to specify placement preferences.
+   * 指明任务执行的最理想位置(本地化策略)
    */
   protected def getPreferredLocations(split: Partition): Seq[String] = Nil
 
-  /** Optionally overridden by subclasses to specify how they are partitioned. */
+  /** Optionally overridden by subclasses to specify how they are partitioned.
+   * 分区器
+   */
   @transient val partitioner: Option[Partitioner] = None
 
   // =======================================================================
@@ -146,10 +160,13 @@ abstract class RDD[T: ClassTag](
   /** The SparkContext that created this RDD. */
   def sparkContext: SparkContext = sc
 
-  /** A unique ID for this RDD (within its SparkContext). */
+  /** A unique ID for this RDD (within its SparkContext).
+   * 这个RDD的唯一id 一个原子整型+1递增(SparkContext生命周期)
+   */
   val id: Int = sc.newRddId()
 
-  /** A friendly name for this RDD */
+  /** A friendly name for this RDD
+   * RDD名字 */
   @transient var name: String = _
 
   /** Assign a name to this RDD */
@@ -2058,5 +2075,6 @@ object RDD {
  * is INDETERMINATE, it's very likely the RDD's output is also INDETERMINATE.
  */
 private[spark] object DeterministicLevel extends Enumeration {
+  /* determinate 确定的  unordered 无序 indeterminate 模糊的 */
   val DETERMINATE, UNORDERED, INDETERMINATE = Value
 }

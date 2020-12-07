@@ -53,7 +53,7 @@ abstract class InternalRow extends SpecializedGetters with Serializable {
   /**
    * Update the decimal column at `i`.
    *
-   * Note: In order to support update decimal with precision > 18 in UnsafeRow,
+   * Note: In order to support update decimal with precision(精准) > 18 in UnsafeRow,
    * CAN NOT call setNullAt() for decimal column on UnsafeRow, call setDecimal(i, null, precision).
    */
   def setDecimal(i: Int, value: Decimal, precision: Int) { update(i, value) }
@@ -98,6 +98,7 @@ abstract class InternalRow extends SpecializedGetters with Serializable {
 object InternalRow {
   /**
    * This method can be used to construct a [[InternalRow]] with the given values.
+   * 创建GenericInternalRow
    */
   def apply(values: Any*): InternalRow = new GenericInternalRow(values.toArray)
 
@@ -111,6 +112,7 @@ object InternalRow {
 
   /**
    * Copies the given value if it's string/struct/array/map type.
+   * 复制值
    */
   def copyValue(value: Any): Any = value match {
     case v: UTF8String => v.copy()
@@ -124,6 +126,7 @@ object InternalRow {
    * Returns an accessor for an `InternalRow` with given data type. The returned accessor
    * actually takes a `SpecializedGetters` input because it can be generalized to other classes
    * that implements `SpecializedGetters` (e.g., `ArrayData`) too.
+   * 目前另一个只有ArrayDate
    */
   def getAccessor(dataType: DataType): (SpecializedGetters, Int) => Any = dataType match {
     case BooleanType => (input, ordinal) => input.getBoolean(ordinal)

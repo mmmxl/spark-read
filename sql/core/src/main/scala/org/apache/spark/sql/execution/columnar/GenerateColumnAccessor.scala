@@ -25,6 +25,7 @@ import org.apache.spark.sql.types._
 
 /**
  * An Iterator to walk through the InternalRows from a CachedBatch
+ * 从CachedBatch遍历InternalRows的迭代器
  */
 abstract class ColumnarIterator extends Iterator[InternalRow] {
   def initialize(input: Iterator[CachedBatch], columnTypes: Array[DataType],

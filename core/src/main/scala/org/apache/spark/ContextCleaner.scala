@@ -63,15 +63,16 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
    * A buffer to ensure that `CleanupTaskWeakReference`s are not garbage collected as long as they
    * have not been handled by the reference queue.
    */
+  /* 缓存顶级的AnyRef引用 */
   private val referenceBuffer =
     Collections.newSetFromMap[CleanupTaskWeakReference](new ConcurrentHashMap)
-
+  /* 缓存AnyRef的虚引用 */
   private val referenceQueue = new ReferenceQueue[AnyRef]
-
+  /* 缓存清理工作的监听器数组 */
   private val listeners = new ConcurrentLinkedQueue[CleanerListener]()
-
+  /* 用于具体清理工作的线程（守护线程）*/
   private val cleaningThread = new Thread() { override def run() { keepCleaning() }}
-
+  /* 用于执行GC的调度线程池 只包含一个线程 */
   private val periodicGCService: ScheduledExecutorService =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("context-cleaner-periodic-gc")
 
@@ -83,6 +84,7 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
    * on the driver, this may happen very occasionally or not at all. Not cleaning at all may
    * lead to executors running out of disk space after a while.
    */
+  /* 执行GC的事件间隔 默认30分钟（守护线程） */
   private val periodicGCInterval =
     sc.conf.getTimeAsSeconds("spark.cleaner.periodicGC.interval", "30min")
 
@@ -96,6 +98,7 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
    * for instance, when the driver performs a GC and cleans up all broadcast blocks that are no
    * longer in scope.
    */
+  /* 清理非Shuffle数据的其他数据是否是阻塞式的 true */
   private val blockOnCleanupTasks = sc.conf.getBoolean(
     "spark.cleaner.referenceTracking.blocking", true)
 
@@ -109,9 +112,11 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
    * until the real RPC issue (referred to in the comment above `blockOnCleanupTasks`) is
    * resolved.
    */
+  /* 清理Shuffle数据是否是阻塞式的 false */
   private val blockOnShuffleCleanupTasks = sc.conf.getBoolean(
     "spark.cleaner.referenceTracking.blocking.shuffle", false)
 
+  /* ContextCleaner是否停止的状态标记 false */
   @volatile private var stopped = false
 
   /** Attach a listener object to get information of when objects are cleaned. */
@@ -121,9 +126,11 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
 
   /** Start the cleaner. */
   def start(): Unit = {
+    // 设置为守护进程，并指定名称
     cleaningThread.setDaemon(true)
     cleaningThread.setName("Spark Context Cleaner")
     cleaningThread.start()
+    // 给periodicGCService设置以periodicGCInterval作为时间间隔进行GC操作
     periodicGCService.scheduleAtFixedRate(new Runnable {
       override def run(): Unit = System.gc()
     }, periodicGCInterval, periodicGCInterval, TimeUnit.SECONDS)

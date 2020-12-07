@@ -44,7 +44,7 @@ private object ConfigReader {
  * overridden.
  *
  * If the reference cannot be resolved, the original string will be retained.
- *
+ * 一个用于读取配置和合理替换的辅助类
  * @param conf The config provider for the default namespace (no prefix).
  */
 private[spark] class ConfigReader(conf: ConfigProvider) {

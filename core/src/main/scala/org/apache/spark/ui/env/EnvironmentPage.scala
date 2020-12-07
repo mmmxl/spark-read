@@ -33,17 +33,20 @@ private[ui] class EnvironmentPage(
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val appEnv = store.environmentInfo()
+    // jvm运行时信息
     val jvmInformation = Map(
       "Java Version" -> appEnv.runtime.javaVersion,
       "Java Home" -> appEnv.runtime.javaHome,
       "Scala Version" -> appEnv.runtime.scalaVersion)
-
     val runtimeInformationTable = UIUtils.listingTable(
       propertyHeader, jvmRow, jvmInformation, fixedWidth = true)
+    // Spark属性信息
     val sparkPropertiesTable = UIUtils.listingTable(propertyHeader, propertyRow,
       Utils.redact(conf, appEnv.sparkProperties.toSeq), fixedWidth = true)
+    // 系统属性信息
     val systemPropertiesTable = UIUtils.listingTable(propertyHeader, propertyRow,
       Utils.redact(conf, appEnv.systemProperties.sorted), fixedWidth = true)
+    // 类路径信息
     val classpathEntriesTable = UIUtils.listingTable(
       classPathHeaders, classPathRow, appEnv.classpathEntries, fixedWidth = true)
     val content =
@@ -93,10 +96,9 @@ private[ui] class EnvironmentPage(
           {classpathEntriesTable}
         </div>
       </span>
-
+    // 调用UIUtils的headerSparkPage封装好的css、js、header以及页面布局等
     UIUtils.headerSparkPage(request, "Environment", content, parent)
   }
-
   private def propertyHeader = Seq("Name", "Value")
   private def classPathHeaders = Seq("Resource", "Source")
   private def jvmRow(kv: (String, String)) = <tr><td>{kv._1}</td><td>{kv._2}</td></tr>
@@ -104,6 +106,7 @@ private[ui] class EnvironmentPage(
   private def classPathRow(data: (String, String)) = <tr><td>{data._1}</td><td>{data._2}</td></tr>
 }
 
+// 继承自SparkUITab 联结EnvironmentPage
 private[ui] class EnvironmentTab(
     parent: SparkUI,
     store: AppStatusStore) extends SparkUITab(parent, "environment") {

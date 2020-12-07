@@ -39,6 +39,7 @@ package object trees extends Logging {
 
   /**
    * A [[TreeNode]] companion for reference equality for Hash based Collection.
+   * TreeNode的引用比较
    */
   class TreeNodeRef(val obj: TreeNode[_]) {
     override def equals(o: Any): Boolean = o match {

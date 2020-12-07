@@ -21,6 +21,7 @@ import java.io.File
 
 /**
  * Resolves paths to files added through `SparkContext.addFile()`.
+ * 解析通过SparkContext.addFile()加载的路径
  */
 object SparkFiles {
 
