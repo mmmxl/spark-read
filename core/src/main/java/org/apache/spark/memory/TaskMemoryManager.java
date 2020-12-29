@@ -132,6 +132,7 @@ public class TaskMemoryManager {
   /**
    * Acquire N bytes of memory for a consumer. If there is no enough memory, it will call
    * spill() of consumers to release more memory.
+   * 为一个消费者获取N个字节的内存。如果没有足够的内存，它将调用消费者的spill()来释放更多的内存。
    *
    * @return number of bytes successfully granted (<= N).
    */
@@ -148,6 +149,7 @@ public class TaskMemoryManager {
 
       // Try to release memory from other consumers first, then we can reduce the frequency of
       // spilling, avoid to have too many spilled files.
+      // 申请到的内存不足
       if (got < required) {
         // Call spill() on other consumers to release memory
         // Sort the consumers according their memory usage. So we avoid spilling the same consumer

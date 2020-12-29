@@ -198,6 +198,8 @@ private[spark] class DiskBlockObjectWriter(
    * Reverts writes that haven't been committed yet. Callers should invoke this function
    * when there are runtime exceptions. This method will not throw, though it may be
    * unsuccessful in truncating written data.
+   * 恢复尚未提交的写入。当出现运行时异常时，调用者应该调用这个函数。这个方法不会抛出，尽管它可能会被称为
+   * 在截断写入的数据时不成功。
    *
    * @return the file that this DiskBlockObjectWriter wrote to.
    */

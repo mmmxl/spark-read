@@ -25,6 +25,8 @@ import org.apache.spark.util.SizeEstimator
  * A general interface for collections to keep track of their estimated sizes in bytes.
  * We sample with a slow exponential back-off using the SizeEstimator to amortize the time,
  * as each call to SizeEstimator is somewhat expensive (order of a few milliseconds).
+ * 一个通用的接口，用于跟踪以字节为单位的集合的估计大小。
+ * 我们使用SizeEstimator以缓慢的指数后退方式进行采样，以摊销时间。
  */
 private[spark] trait SizeTracker {
 

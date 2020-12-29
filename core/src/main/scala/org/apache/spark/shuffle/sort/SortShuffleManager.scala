@@ -109,6 +109,8 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
   /**
    * Get a reader for a range of reduce partitions (startPartition to endPartition-1, inclusive).
    * Called on executors by reduce tasks.
+   * 获取一系列reduce分区的读取器 (startPartition 到 endPartition-1，包括)。
+   * 由reduce任务在执行器上调用。
    */
   override def getReader[K, C](
       handle: ShuffleHandle,

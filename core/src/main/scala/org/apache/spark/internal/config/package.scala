@@ -548,6 +548,9 @@ package object config {
   private[spark] val SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD =
     ConfigBuilder("spark.shuffle.spill.numElementsForceSpillThreshold")
       .internal()
+      /* 在强制shuffle sorter溢出之前，内存中的最大元素数。
+         默认情况下，它是Integer.MAX_VALUE，这意味着我们永远不会强制溢出，直到我们达到一些限制，
+         比如sorter中指针数组的最大页面大小限制。 */
       .doc("The maximum number of elements in memory before forcing the shuffle sorter to spill. " +
         "By default it's Integer.MAX_VALUE, which means we never force the sorter to spill, " +
         "until we reach some limitations, like the max page size limitation for the pointer " +

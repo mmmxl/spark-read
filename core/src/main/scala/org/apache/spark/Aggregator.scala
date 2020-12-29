@@ -23,10 +23,10 @@ import org.apache.spark.util.collection.ExternalAppendOnlyMap
 /**
  * :: DeveloperApi ::
  * A set of functions used to aggregate data.
- *
+ * 聚合数据的函数集
  * @param createCombiner function to create the initial value of the aggregation.
- * @param mergeValue function to merge a new value into the aggregation result.
- * @param mergeCombiners function to merge outputs from multiple mergeValue function.
+ * @param mergeValue function to merge a new value into the aggregation result. 聚合值
+ * @param mergeCombiners function to merge outputs from multiple mergeValue function. 聚合mergeValue
  */
 @DeveloperApi
 case class Aggregator[K, V, C] (
@@ -39,7 +39,9 @@ case class Aggregator[K, V, C] (
       context: TaskContext): Iterator[(K, C)] = {
     val combiners = new ExternalAppendOnlyMap[K, V, C](createCombiner, mergeValue, mergeCombiners)
     combiners.insertAll(iter)
+    // 更新监视器状态
     updateMetrics(context, combiners)
+    // 返回包含全部计算结果的迭代器
     combiners.iterator
   }
 
@@ -49,10 +51,11 @@ case class Aggregator[K, V, C] (
     val combiners = new ExternalAppendOnlyMap[K, C, C](identity, mergeCombiners, mergeCombiners)
     combiners.insertAll(iter)
     updateMetrics(context, combiners)
+    // 返回包含全部计算结果的迭代器
     combiners.iterator
   }
 
-  /** Update task metrics after populating the external map. */
+  /** Update task metrics after populating(填充) the external map. */
   private def updateMetrics(context: TaskContext, map: ExternalAppendOnlyMap[_, _, _]): Unit = {
     Option(context).foreach { c =>
       c.taskMetrics().incMemoryBytesSpilled(map.memoryBytesSpilled)

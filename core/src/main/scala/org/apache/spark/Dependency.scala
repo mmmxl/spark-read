@@ -38,6 +38,7 @@ abstract class Dependency[T] extends Serializable {
  * :: DeveloperApi ::
  * Base class for dependencies where each partition of the child RDD depends on a small number
  * of partitions of the parent RDD. Narrow dependencies allow for pipelined execution.
+ * 子RDD的每个分区都依赖于父RDD的少量分区的依赖关系的基础类。NarrowDependency使其能够以流水线方式执行。
  */
 @DeveloperApi
 abstract class NarrowDependency[T](_rdd: RDD[T]) extends Dependency[T] {
@@ -56,6 +57,7 @@ abstract class NarrowDependency[T](_rdd: RDD[T]) extends Dependency[T] {
  * :: DeveloperApi ::
  * Represents a dependency on the output of a shuffle stage. Note that in the case of shuffle,
  * the RDD is transient since we don't need it on the executor side.
+ * 表示对shuffle阶段输出的依赖性。请注意，在shuffle的情况下，RDD是瞬态的，因为我们在执行器端不需要它。
  *
  * @param _rdd the parent RDD
  * @param partitioner partitioner used to partition the shuffle output
@@ -119,6 +121,7 @@ class OneToOneDependency[T](rdd: RDD[T]) extends NarrowDependency[T](rdd) {
 class RangeDependency[T](rdd: RDD[T], inStart: Int, outStart: Int, length: Int)
   extends NarrowDependency[T](rdd) {
 
+  /** 按偏移位置来取 */
   override def getParents(partitionId: Int): List[Int] = {
     if (partitionId >= outStart && partitionId < outStart + length) {
       List(partitionId - outStart + inStart)

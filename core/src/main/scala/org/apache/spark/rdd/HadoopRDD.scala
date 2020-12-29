@@ -44,6 +44,7 @@ import org.apache.spark.util.{NextIterator, SerializableConfiguration, ShutdownH
 
 /**
  * A Spark split class that wraps around a Hadoop InputSplit.
+ * Hadoop InputSplit的包装类
  */
 private[spark] class HadoopPartition(rddId: Int, override val index: Int, s: InputSplit)
   extends Partition {
@@ -76,7 +77,7 @@ private[spark] class HadoopPartition(rddId: Int, override val index: Int, s: Inp
  * :: DeveloperApi ::
  * An RDD that provides core functionality for reading data stored in Hadoop (e.g., files in HDFS,
  * sources in HBase, or S3), using the older MapReduce API (`org.apache.hadoop.mapred`).
- *
+ * 提供读取存储在Hadoop的数据(HDFS,HBase,S3) 使用MRv1旧的MapReduce API
  * @param sc The SparkContext to associate the RDD with.
  * @param broadcastedConf A general Hadoop Configuration, or a subclass of it. If the enclosed
  *   variable references an instance of JobConf, then that JobConf will be used for the Hadoop job.
@@ -95,7 +96,7 @@ private[spark] class HadoopPartition(rddId: Int, override val index: Int, s: Inp
 class HadoopRDD[K, V](
     sc: SparkContext,
     broadcastedConf: Broadcast[SerializableConfiguration],
-    initLocalJobConfFuncOpt: Option[JobConf => Unit],
+    initLocalJobConfFuncOpt: Option[JobConf => Unit], /* 用于设置输入路径 */
     inputFormatClass: Class[_ <: InputFormat[K, V]],
     keyClass: Class[K],
     valueClass: Class[V],

@@ -22,6 +22,7 @@ import org.apache.spark.sql.execution.SparkStrategy
 
 /**
  * Allows the execution of relational queries, including those expressed in SQL using Spark.
+ * 允许执行关系型查询，包括那些使用Spark的SQL表达的查询。
  *
  *  @groupname dataType Data types
  *  @groupdesc Spark SQL data types.
@@ -38,10 +39,13 @@ package object sql {
    * with the query planner and is not designed to be stable across spark releases.  Developers
    * writing libraries should instead consider using the stable APIs provided in
    * [[org.apache.spark.sql.sources]]
+   * 将一个逻辑计划转换为零或多个SparkPlans
+   * 这个API的暴露是为了实验查询计划器，而不是为了在不同的spark版本中保持稳定。
+   * 开发者在编写库时应该考虑使用在[[org.apache.spark.sql.sources]]
    */
   @DeveloperApi
   @InterfaceStability.Unstable
-  type Strategy = SparkStrategy
+  type  Strategy  = SparkStrategy
 
   type DataFrame = Dataset[Row]
 }

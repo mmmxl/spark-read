@@ -86,7 +86,7 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
-   * 缺少sparkContext会抛出SparkEXception driver端未调用
+   * 缺少sparkContext会抛出SparkException driver端未调用
    * (1) rdd1.map(x => rdd2.values.count() * x) rdd不可以别的rdd内部执行
    * (2) SparkStreaming job从checkpoint恢复，这个rdd没有被job运用在DStream operations
    */
@@ -435,6 +435,7 @@ abstract class RDD[T: ClassTag](
    * Return a new RDD containing the distinct elements in this RDD.
    */
   def distinct(numPartitions: Int)(implicit ord: Ordering[T] = null): RDD[T] = withScope {
+    // map是为了触发隐式转换
     map(x => (x, null)).reduceByKey((x, y) => x, numPartitions).map(_._1)
   }
 
@@ -833,7 +834,7 @@ abstract class RDD[T: ClassTag](
    */
   def mapPartitions[U: ClassTag](
       f: Iterator[T] => Iterator[U],
-      preservesPartitioning: Boolean = false): RDD[U] = withScope {
+      preservesPartitioning: Boolean = false ): RDD[U] = withScope {
     val cleanedF = sc.clean(f)
     new MapPartitionsRDD(
       this,

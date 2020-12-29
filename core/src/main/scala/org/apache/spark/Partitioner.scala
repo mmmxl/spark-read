@@ -61,17 +61,22 @@ object Partitioner {
    * out-of-memory errors.
    *
    * We use two method parameters (rdd, others) to enforce callers passing at least 1 RDD.
+   *
+   * 1.上游分区数最大的rdd有合法的分区器或者分区数>defaultNumPartitions
+   *   用该rdd的分区器
+   * 2.使用HashPartition (先选spark.default.parallelism,为空选分区数最大rdd的分区数)
    */
   def defaultPartitioner(rdd: RDD[_], others: RDD[_]*): Partitioner = {
     val rdds = (Seq(rdd) ++ others)
+    // 保留分区数>0的rdd
     val hasPartitioner = rdds.filter(_.partitioner.exists(_.numPartitions > 0))
-
+    // 选取分区数最大的rdd
     val hasMaxPartitioner: Option[RDD[_]] = if (hasPartitioner.nonEmpty) {
       Some(hasPartitioner.maxBy(_.partitions.length))
     } else {
       None
     }
-
+    // 设置了spark.default.parallelism就使用,否则使用上游最大分区数
     val defaultNumPartitions = if (rdd.context.conf.contains("spark.default.parallelism")) {
       rdd.context.defaultParallelism
     } else {
@@ -80,6 +85,8 @@ object Partitioner {
 
     // If the existing max partitioner is an eligible one, or its partitions number is larger
     // than the default number of partitions, use the existing partitioner.
+    // 如果现有的最大分区器是一个合格的分区器，或者它的分区数比较大比默认的分区数量多，使用现有的分区器。
+    // 否则使用默认分区数的HashPartitioner
     if (hasMaxPartitioner.nonEmpty && (isEligiblePartitioner(hasMaxPartitioner.get, rdds) ||
         defaultNumPartitions < hasMaxPartitioner.get.getNumPartitions)) {
       hasMaxPartitioner.get.partitioner.get
@@ -92,6 +99,10 @@ object Partitioner {
    * Returns true if the number of partitions of the RDD is either greater than or is less than and
    * within a single order of magnitude of the max number of upstream partitions, otherwise returns
    * false.
+   * 如果RDD的分区数大于或小于上游分区的最大数量，且在一个数量级之内，则返回true，否则返回false。
+   * 这里maxPartitions与hasMaxPartitioner.getNumPartitions差别在于
+   * hasMaxPartitioner.getNumPartitions: 只计算有Partitioner的
+   * maxPartitions: 有无Partitioner都会计算
    */
   private def isEligiblePartitioner(
      hasMaxPartitioner: RDD[_],
@@ -116,7 +127,7 @@ class HashPartitioner(partitions: Int) extends Partitioner {
 
   def getPartition(key: Any): Int = key match {
     case null => 0
-    case _ => Utils.nonNegativeMod(key.hashCode, numPartitions)
+    case _ => Utils.nonNegativeMod(key.hashCode, numPartitions) /* 返回一个结果为[0, numPartitions)的整型 */
   }
 
   override def equals(other: Any): Boolean = other match {

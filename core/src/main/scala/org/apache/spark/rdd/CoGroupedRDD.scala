@@ -68,6 +68,7 @@ private[spark] class CoGroupPartition(
  * :: DeveloperApi ::
  * An RDD that cogroups its parents. For each key k in parent RDDs, the resulting RDD contains a
  * tuple with the list of values for that key.
+ * 一个RDD，将其父RDD进行了cogroups。对于父RDD中的每个键k，生成的RDD包含一个元组，其中包含该键的值列表。
  *
  * @param rdds parent RDDs.
  * @param part partitioner used to partition the shuffle output
@@ -79,11 +80,15 @@ private[spark] class CoGroupPartition(
 class CoGroupedRDD[K: ClassTag](
     @transient var rdds: Seq[RDD[_ <: Product2[K, _]]],
     part: Partitioner)
+  /* 会斩断血缘  */
   extends RDD[(K, Array[Iterable[_]])](rdds.head.context, Nil) {
 
   // For example, `(k, a) cogroup (k, b)` produces k -> Array(ArrayBuffer as, ArrayBuffer bs).
   // Each ArrayBuffer is represented as a CoGroup, and the resulting Array as a CoGroupCombiner.
   // CoGroupValue is the intermediate state of each value before being merged in compute.
+  /* 例如，`(k, a) cogroup (k, b)`产生k -> Array(ArrayBuffer as, ArrayBuffer bs)。
+     每个ArrayBuffer被表示为一个CoGroup，而产生的Array被表示为一个CoGroupCombiner。
+     CoGroupValue是每个值在计算中被合并之前的中间状态。 */
   private type CoGroup = CompactBuffer[Any]
   private type CoGroupValue = (Any, Int)  // Int is dependency number
   private type CoGroupCombiner = Array[CoGroup]
@@ -98,6 +103,7 @@ class CoGroupedRDD[K: ClassTag](
 
   override def getDependencies: Seq[Dependency[_]] = {
     rdds.map { rdd: RDD[_] =>
+      // Partitioner相同 就不走shuffle
       if (rdd.partitioner == Some(part)) {
         logDebug("Adding one-to-one dependency with " + rdd)
         new OneToOneDependency(rdd)
@@ -115,6 +121,7 @@ class CoGroupedRDD[K: ClassTag](
       // Each CoGroupPartition will have a dependency per contributing RDD
       array(i) = new CoGroupPartition(i, rdds.zipWithIndex.map { case (rdd, j) =>
         // Assume each RDD contributed a single dependency, and get it
+        // 假设每个RDD都贡献了一个单一的依赖关系，然后得到它
         dependencies(j) match {
           case s: ShuffleDependency[_, _, _] =>
             None

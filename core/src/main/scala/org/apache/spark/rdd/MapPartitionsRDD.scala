@@ -23,6 +23,10 @@ import org.apache.spark.{Partition, TaskContext}
 
 /**
  * An RDD that applies the provided function to every partition of the parent RDD.
+ * 将提供的函数应用于父RDD的每个分区的RDD
+ * 2个主要的点:
+ * 1.以Partition为基本单位进行处理
+ * 2.partitioner为None,PairRdd为父RDD的partitioner
  *
  * @param prev the parent RDD.
  * @param f The function used to map a tuple of (TaskContext, partition index, input iterator) to
@@ -30,11 +34,14 @@ import org.apache.spark.{Partition, TaskContext}
  * @param preservesPartitioning Whether the input function preserves the partitioner, which should
  *                              be `false` unless `prev` is a pair RDD and the input function
  *                              doesn't modify the keys.
- * @param isFromBarrier Indicates whether this RDD is transformed from an RDDBarrier, a stage
- *                      containing at least one RDDBarrier shall be turned into a barrier stage.
+ *                              输入函数是否保留分区器，应该是`false`，除非`prev`是PairRDD，输入函数不修改键
+ * @param isFromBarrier    Indicates whether this RDD is transformed from an RDDBarrier, a stage
+ *                         containing at least one RDDBarrier shall be turned into a barrier stage.
+ *                         表示该RDD是否由RDDBarrier转化而来，一个至少包含一个RDDBarrier的阶段应转化为障碍阶段。
  * @param isOrderSensitive whether or not the function is order-sensitive. If it's order
  *                         sensitive, it may return totally different result when the input order
  *                         is changed. Mostly stateful functions are order-sensitive.
+ *                         该函数是否是顺序敏感的。如果是顺序敏感的，当输入顺序改变时，它可能返回完全不同的结果。大多数状态函数都是顺序敏感的。
  */
 private[spark] class MapPartitionsRDD[U: ClassTag, T: ClassTag](
     var prev: RDD[T],

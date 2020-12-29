@@ -30,6 +30,11 @@ import scala.collection.mutable.PriorityQueue
  * findMedian() is called we check if two heaps have the same size. If they do, we should
  * return the average of the two top values of heaps. Otherwise we return the top of the
  * heap which has one more element.
+ * MedianHeap被设计用来快速跟踪可能包含重复的一组数字的中位数。
+ * 插入一个新数字的时间复杂度为O(log n)，确定中位数的时间复杂度为O(1)。
+ * 基本思想是维护两个堆：一个较小的一半和一个较大的一半。smallerHalf存储所有数字的小半部分，而largeHalf存储大半部分。
+ * 当每次插入一个新的数字时，两个堆的大小需要平衡，因此它们的大小不会相差超过1。
+ * 如果它们相同，我们应该 返回堆的两个顶值的平均值。否则，我们返回堆的顶值。多了一个元素的堆。
  */
 private[spark] class MedianHeap(implicit val ord: Ordering[Double]) {
 

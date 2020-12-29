@@ -35,33 +35,42 @@ import org.apache.spark.annotation.DeveloperApi
  * The map can support up to `375809638 (0.7 * 2 ^ 29)` elements.
  *
  * TODO: Cache the hash values of each key? java.util.HashMap does that.
+ * 一个简单的开放式哈希表，针对只有append操作的用例进行了优化，其中的键永远不会被删除，但每个键的值可能会改变。
+ * 这个实现使用了二次探测，哈希表大小为2的幂级，保证了每个键都能探索所有空间（见http://en.wikipedia.org/wiki/Quadratic_probing）。
+ *
+ * 该映射可以支持多达`375809638 (0.7 * 2 ^ 29)`个元素。
+ *
+ * TODO: 缓存每个键的哈希值？ java.util.HashMap可以做到这一点。
  */
 @DeveloperApi
 class AppendOnlyMap[K, V](initialCapacity: Int = 64)
   extends Iterable[(K, V)] with Serializable {
-
+  /** 默认桶大小为64 */
   import AppendOnlyMap._
-
+  // 初始大小<=MAXIMUM_CAPACITY 并且 >=1
   require(initialCapacity <= MAXIMUM_CAPACITY,
     s"Can't make capacity bigger than ${MAXIMUM_CAPACITY} elements")
   require(initialCapacity >= 1, "Invalid initial capacity")
 
-  private val LOAD_FACTOR = 0.7
+  private val LOAD_FACTOR = 0.7 // 加载因子
 
   private var capacity = nextPowerOf2(initialCapacity)
-  private var mask = capacity - 1
+  private var mask = capacity - 1 // 掩码
   private var curSize = 0
   private var growThreshold = (LOAD_FACTOR * capacity).toInt
 
   // Holds keys and values in the same array for memory locality; specifically, the order of
   // elements is key0, value0, key1, value1, key2, value2, etc.
+  // 将键和值存放在同一个数组中，以实现内存的定位，具体来说，元素的顺序是key0、value0、key1、value1、key2、value2等。
   private var data = new Array[AnyRef](2 * capacity)
 
   // Treat the null key differently so we can use nulls in "data" to represent empty items.
+  // 对空键进行不同的处理，所以我们可以在 "数据 "中使用nulls来表示空项。
   private var haveNullValue = false
   private var nullValue: V = null.asInstanceOf[V]
 
   // Triggered by destructiveSortedIterator; the underlying data array may no longer be used
+  // 由destructiveSortedIterator触发；底层数据数组可能不再被使用。
   private var destroyed = false
   private val destructionMessage = "Map state is invalid from destructive sorting!"
 
@@ -72,15 +81,18 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64)
     if (k.eq(null)) {
       return nullValue
     }
+    // 二次探测法找到在桶中的索引
     var pos = rehash(k.hashCode) & mask
     var i = 1
     while (true) {
       val curKey = data(2 * pos)
       if (k.eq(curKey) || k.equals(curKey)) {
+        // 引用相等或者值相等
         return data(2 * pos + 1).asInstanceOf[V]
       } else if (curKey.eq(null)) {
         return null.asInstanceOf[V]
       } else {
+        // 存在冲突，就往后依次寻找
         val delta = i
         pos = (pos + delta) & mask
         i += 1
@@ -93,6 +105,7 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64)
   def update(key: K, value: V): Unit = {
     assert(!destroyed, destructionMessage)
     val k = key.asInstanceOf[AnyRef]
+    // map中无null,则添加后返回;有则直接返回
     if (k.eq(null)) {
       if (!haveNullValue) {
         incrementSize()
@@ -111,9 +124,11 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64)
         incrementSize()  // Since we added a new key
         return
       } else if (k.eq(curKey) || k.equals(curKey)) {
+        // 引用相等或者值相等 修改值
         data(2 * pos + 1) = value.asInstanceOf[AnyRef]
         return
       } else {
+        // 存在冲突，就往后依次寻找
         val delta = i
         pos = (pos + delta) & mask
         i += 1
@@ -124,6 +139,8 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64)
   /**
    * Set the value for key to updateFunc(hadValue, oldValue), where oldValue will be the old value
    * for key, if any, or null otherwise. Returns the newly updated value.
+   * 与update区别为,update为设置值,changeValue是对value做计算
+   * updateFunc: e.g. reduce(0)(_+_) => false: (0)  true: (_+_)
    */
   def changeValue(key: K, updateFunc: (Boolean, V) => V): V = {
     assert(!destroyed, destructionMessage)
@@ -210,7 +227,7 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64)
    */
   private def rehash(h: Int): Int = Hashing.murmur3_32().hashInt(h).asInt()
 
-  /** Double the table's size and re-hash everything */
+  /** Double the table's size and re-hash everything 2倍容量并且再分配其中元素 */
   protected def growTable() {
     // capacity < MAXIMUM_CAPACITY (2 ^ 29) so capacity * 2 won't overflow
     val newCapacity = capacity * 2
@@ -248,6 +265,7 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64)
     growThreshold = (LOAD_FACTOR * newCapacity).toInt
   }
 
+  // 下一个2的次幂
   private def nextPowerOf2(n: Int): Int = {
     val highBit = Integer.highestOneBit(n)
     if (highBit == n) n else highBit << 1
@@ -256,11 +274,16 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64)
   /**
    * Return an iterator of the map in sorted order. This provides a way to sort the map without
    * using additional memory, at the expense of destroying the validity of the map.
+   * 按排序顺序返回map的迭代器。这提供了一种不使用额外内存的排序方式，但却以破坏map的有效性为代价。
+   * 1.将有值的元素位移到数组前端 [null, null, k1, v1, null, null, k2, v2] => [k1, v1, k2, v2, null, null, null, null]
+   * 2.使用timSort排序数组
+   * 3.生成一个迭代器
    */
   def destructiveSortedIterator(keyComparator: Comparator[K]): Iterator[(K, V)] = {
     destroyed = true
     // Pack KV pairs into the front of the underlying array
     var keyIndex, newIndex = 0
+    // 将有值的元素位移到数组前端 [null, null, k1, v1, null, null, k2, v2] => [k1, v1, k2, v2, null, null, null, null]
     while (keyIndex < capacity) {
       if (data(2 * keyIndex) != null) {
         data(2 * newIndex) = data(2 * keyIndex)
@@ -270,12 +293,12 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64)
       keyIndex += 1
     }
     assert(curSize == newIndex + (if (haveNullValue) 1 else 0))
-
+    // 使用timSort排序数组
     new Sorter(new KVArraySortDataFormat[K, AnyRef]).sort(data, 0, newIndex, keyComparator)
-
+    // 返回一个Iterator 从null开始遍历到结束
     new Iterator[(K, V)] {
       var i = 0
-      var nullValueReady = haveNullValue
+      var nullValueReady: Boolean = haveNullValue
       def hasNext: Boolean = (i < newIndex || nullValueReady)
       def next(): (K, V) = {
         if (nullValueReady) {
@@ -292,6 +315,7 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64)
 
   /**
    * Return whether the next insert will cause the map to grow
+   * 扩容阈值
    */
   def atGrowThreshold: Boolean = curSize == growThreshold
 }

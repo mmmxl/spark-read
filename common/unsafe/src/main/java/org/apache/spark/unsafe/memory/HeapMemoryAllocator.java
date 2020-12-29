@@ -27,17 +27,26 @@ import org.apache.spark.unsafe.Platform;
 
 /**
  * A simple {@link MemoryAllocator} that can allocate up to 16GB using a JVM long primitive array.
+ * 一个简单的{@link MemoryAllocator}，可以使用JVM的长基元数组分配到16GB。
+ *
+ * 使用弱引用的原因: MemoryBlock不使用的时候,可以主要使用System.gc()来加快堆内存的回收和分配效率
  */
 public class HeapMemoryAllocator implements MemoryAllocator {
 
+  /**
+   * 弱引用缓冲池,用于Page页(MemoryBlock)的分配
+   */
   @GuardedBy("this")
   private final Map<Long, LinkedList<WeakReference<long[]>>> bufferPoolsBySize = new HashMap<>();
 
-  private static final int POOLING_THRESHOLD_BYTES = 1024 * 1024;
+  private static final int POOLING_THRESHOLD_BYTES = 1024 * 1024; // 1m
 
   /**
    * Returns true if allocations of the given size should go through the pooling mechanism and
    * false otherwise.
+   * 用于判断指定大小的MemoryBlock，是否需要采用池化机制
+   * (即从缓冲池BufferPoolsBySize中获取MemoryBlock或将MemoryBlock放入bufferPoolsBySize)
+   *
    */
   private boolean shouldPool(long size) {
     // Very small allocations are less likely to benefit from pooling.
@@ -88,6 +97,7 @@ public class HeapMemoryAllocator implements MemoryAllocator {
       "TMM-allocated pages must first be freed via TMM.freePage(), not directly in allocator " +
         "free()";
 
+    // 获取待释放MemoryBlock的大小
     final long size = memory.size();
     if (MemoryAllocator.MEMORY_DEBUG_FILL_ENABLED) {
       memory.fill(MemoryAllocator.MEMORY_DEBUG_FILL_FREED_VALUE);
@@ -103,12 +113,14 @@ public class HeapMemoryAllocator implements MemoryAllocator {
 
     long alignedSize = ((size + 7) / 8) * 8;
     if (shouldPool(alignedSize)) {
+      // 这次保证有一个弱引用,方便gc
       synchronized (this) {
         LinkedList<WeakReference<long[]>> pool = bufferPoolsBySize.get(alignedSize);
         if (pool == null) {
           pool = new LinkedList<>();
           bufferPoolsBySize.put(alignedSize, pool);
         }
+        // 将MemoryBlock的弱引用放入bufferPoolsBySize
         pool.add(new WeakReference<>(array));
       }
     } else {

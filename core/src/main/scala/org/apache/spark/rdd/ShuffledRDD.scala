@@ -27,9 +27,10 @@ private[spark] class ShuffledRDDPartition(val idx: Int) extends Partition {
   override val index: Int = idx
 }
 
-/**
+/**；'；
  * :: DeveloperApi ::
  * The resulting RDD from a shuffle (e.g. repartitioning of data).
+ * shuffle后的结果RDD
  * @param prev the parent RDD.
  * @param part the partitioner used to partition the RDD
  * @tparam K the key class.
@@ -39,8 +40,9 @@ private[spark] class ShuffledRDDPartition(val idx: Int) extends Partition {
 // TODO: Make this return RDD[Product2[K, C]] or have some way to configure mutable pairs
 @DeveloperApi
 class ShuffledRDD[K: ClassTag, V: ClassTag, C: ClassTag](
-    @transient var prev: RDD[_ <: Product2[K, V]],
+    @transient var prev: RDD[_ <: Product2[K, V]], // 父RDD
     part: Partitioner)
+  /* 这里断开了依赖 */
   extends RDD[(K, C)](prev.context, Nil) {
 
   private var userSpecifiedSerializer: Option[Serializer] = None
@@ -51,31 +53,41 @@ class ShuffledRDD[K: ClassTag, V: ClassTag, C: ClassTag](
 
   private var mapSideCombine: Boolean = false
 
-  /** Set a serializer for this RDD's shuffle, or null to use the default (spark.serializer) */
+  /** Set a serializer for this RDD's shuffle, or null to use the default (spark.serializer)
+   * 设置一个序列化器给RDD的shuffle
+   */
   def setSerializer(serializer: Serializer): ShuffledRDD[K, V, C] = {
     this.userSpecifiedSerializer = Option(serializer)
     this
   }
 
-  /** Set key ordering for RDD's shuffle. */
+  /** Set key ordering for RDD's shuffle.
+   * 设置key的Ordering
+   */
   def setKeyOrdering(keyOrdering: Ordering[K]): ShuffledRDD[K, V, C] = {
     this.keyOrdering = Option(keyOrdering)
     this
   }
 
-  /** Set aggregator for RDD's shuffle. */
+  /** Set aggregator for RDD's shuffle.
+   * 设置一个shuffle的聚合器
+   */
   def setAggregator(aggregator: Aggregator[K, V, C]): ShuffledRDD[K, V, C] = {
     this.aggregator = Option(aggregator)
     this
   }
 
-  /** Set mapSideCombine flag for RDD's shuffle. */
+  /** Set mapSideCombine flag for RDD's shuffle.
+   * 是否允许map侧预聚合
+   */
   def setMapSideCombine(mapSideCombine: Boolean): ShuffledRDD[K, V, C] = {
     this.mapSideCombine = mapSideCombine
     this
   }
 
   override def getDependencies: Seq[Dependency[_]] = {
+    // 传入了序列化器用传入的,没有传入就使用默认的
+    // 允许map端预聚合的时候,用value用C
     val serializer = userSpecifiedSerializer.getOrElse {
       val serializerManager = SparkEnv.get.serializerManager
       if (mapSideCombine) {
@@ -90,6 +102,7 @@ class ShuffledRDD[K: ClassTag, V: ClassTag, C: ClassTag](
   override val partitioner = Some(part)
 
   override def getPartitions: Array[Partition] = {
+    // 父RDD每一个new一个ShuffledRDDPartition
     Array.tabulate[Partition](part.numPartitions)(i => new ShuffledRDDPartition(i))
   }
 
@@ -101,6 +114,7 @@ class ShuffledRDD[K: ClassTag, V: ClassTag, C: ClassTag](
 
   override def compute(split: Partition, context: TaskContext): Iterator[(K, C)] = {
     val dep = dependencies.head.asInstanceOf[ShuffleDependency[K, V, C]]
+    // 这里shuffleManager只有一个实现类SortShuffleManager
     SparkEnv.get.shuffleManager.getReader(dep.shuffleHandle, split.index, split.index + 1, context)
       .read()
       .asInstanceOf[Iterator[(K, C)]]

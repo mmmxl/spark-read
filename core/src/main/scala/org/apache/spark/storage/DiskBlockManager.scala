@@ -112,7 +112,9 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
     }
   }
 
-  /** Produces a unique block id and File suitable for storing local intermediate results. */
+  /** Produces a unique block id and File suitable for storing local intermediate results.
+   * 产生一个唯一的块id和File，适合存储本地中间结果。
+   */
   def createTempLocalBlock(): (TempLocalBlockId, File) = {
     var blockId = new TempLocalBlockId(UUID.randomUUID())
     while (getFile(blockId).exists()) {

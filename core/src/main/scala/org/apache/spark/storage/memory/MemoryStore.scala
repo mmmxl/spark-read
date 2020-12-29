@@ -77,6 +77,7 @@ private[storage] trait BlockEvictionHandler {
 /**
  * Stores blocks in memory, either as Arrays of deserialized Java objects or as
  * serialized ByteBuffers.
+ * 将块存储在内存中，可以是反序列化的Java对象数组，也可以是序列化的ByteBuffers
  */
 private[spark] class MemoryStore(
     conf: SparkConf,

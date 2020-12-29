@@ -32,6 +32,7 @@ object TaskContext {
   /**
    * Return the currently active TaskContext. This can be called inside of
    * user functions to access contextual information about running tasks.
+   * 返回当前活动的TaskContext。可以在用户函数中调用这个函数来访问正在运行的任务的上下文信息。
    */
   def get(): TaskContext = taskContext.get
 
