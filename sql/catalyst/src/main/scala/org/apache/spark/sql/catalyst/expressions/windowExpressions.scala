@@ -628,22 +628,22 @@ case class NTile(buckets: Expression) extends RowNumberLike with SizeBasedWindow
 abstract class RankLike extends AggregateWindowFunction {
 
   /** Store the values of the window 'order' expressions. */
-  protected val orderAttrs = children.map { expr =>
+  protected val orderAttrs: Seq[AttributeReference] = children.map { expr =>
     AttributeReference(expr.sql, expr.dataType)()
   }
 
   /** Predicate that detects if the order attributes have changed. */
-  protected val orderEquals = children.zip(orderAttrs)
+  protected val orderEquals: Expression = children.zip(orderAttrs)
     .map(EqualNullSafe.tupled)
     .reduceOption(And)
     .getOrElse(Literal(true))
 
-  protected val orderInit = children.map(e => Literal.create(null, e.dataType))
-  protected val rank = AttributeReference("rank", IntegerType, nullable = false)()
-  protected val rowNumber = AttributeReference("rowNumber", IntegerType, nullable = false)()
-  protected val zero = Literal(0)
-  protected val one = Literal(1)
-  protected val increaseRowNumber = rowNumber + one
+  protected val orderInit: Seq[Literal] = children.map(e => Literal.create(null, e.dataType))
+  protected val rank: AttributeReference = AttributeReference("rank", IntegerType, nullable = false)()
+  protected val rowNumber: AttributeReference = AttributeReference("rowNumber", IntegerType, nullable = false)()
+  protected val zero: Literal = Literal(0)
+  protected val one: Literal = Literal(1)
+  protected val increaseRowNumber: Expression = rowNumber + one
 
   /**
    * Different RankLike implementations use different source expressions to update their rank value.

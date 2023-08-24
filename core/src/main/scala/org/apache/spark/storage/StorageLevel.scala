@@ -34,14 +34,18 @@ import org.apache.spark.util.Utils
  * The [[org.apache.spark.storage.StorageLevel]] singleton object contains some static constants
  * for commonly useful storage levels. To create your own storage level object, use the
  * factory method of the singleton object (`StorageLevel(...)`).
+ *
+ * 1.磁盘存储和内存存储(堆外和堆内)
+ * 2.数据块 序列化or反序列化
+ * 3.备份与复制
  */
 @DeveloperApi
 class StorageLevel private(
-    private var _useDisk: Boolean,
-    private var _useMemory: Boolean,
-    private var _useOffHeap: Boolean,
-    private var _deserialized: Boolean,
-    private var _replication: Int = 1)
+    private var _useDisk: Boolean, // 能否写入磁盘
+    private var _useMemory: Boolean, // 能否写入堆内存
+    private var _useOffHeap: Boolean, // 能否写入堆外内存
+    private var _deserialized: Boolean, // 是否需要堆Block反序列化,当Block经过序列化后,就设置为true
+    private var _replication: Int = 1) // Block的复制份数
   extends Externalizable {
 
   // TODO: Also add fields for caching priority, dataset ID, and flushing.

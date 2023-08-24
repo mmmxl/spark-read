@@ -37,17 +37,21 @@ class UnresolvedException[TreeType <: TreeNode[_]](tree: TreeType, function: Str
 
 /**
  * Holds the name of a relation that has yet to be looked up in a catalog.
- *
+ * 保存尚未在目录中查询到的关系名称
+ * 该节点表示还没有从Catalog解析的关系
  * @param tableIdentifier table name
  */
 case class UnresolvedRelation(tableIdentifier: TableIdentifier)
   extends LeafNode {
 
   /** Returns a `.` separated name for this relation. */
+    // 表名
   def tableName: String = tableIdentifier.unquotedString
 
+  // 要输出的属性
   override def output: Seq[Attribute] = Nil
 
+  // 是否被解析
   override lazy val resolved = false
 }
 
@@ -95,6 +99,7 @@ case class UnresolvedTableValuedFunction(
 
 /**
  * Holds the name of an attribute that has yet to be resolved.
+ * 保存尚未解析的属性名称
  */
 case class UnresolvedAttribute(nameParts: Seq[String]) extends Attribute with Unevaluable {
 
@@ -340,6 +345,11 @@ case class UnresolvedStar(target: Option[Seq[String]]) extends Star with Unevalu
  */
 case class UnresolvedRegex(regexPattern: String, table: Option[String], caseSensitive: Boolean)
   extends Star with Unevaluable {
+  /**
+   * 1.不大小写敏感，加上(?i)
+   * 2.table参数存在，匹配全部字段
+   * 2.table参数不存在，
+   */
   override def expand(input: LogicalPlan, resolver: Resolver): Seq[NamedExpression] = {
     val pattern = if (caseSensitive) regexPattern else s"(?i)$regexPattern"
     table match {

@@ -40,6 +40,13 @@ import org.apache.spark.internal.Logging
  *
  * There is no particular relationship between an operation scope and a stage or a job.
  * A scope may live inside one stage (e.g. map) or span across multiple jobs (e.g. take).
+ *
+ * 一个通用的、命名的代码块，表示实例化RDD的操作。
+ * 所有在相应代码块中实例化的RDD都将存储一个指向该对象的指针。
+ * 例子包括但不限于现有的 RDD 操作，如 textFile、reduceByKey 和 treeAggregate。
+ * 操作范围可以嵌套在其他作用域中。例如，一个 SQL 查询可能会包含与其在下面使用的公共 RDD API 相关联的作用域。
+ * 一个操作范围与一个阶段或一个作业之间没有特定的关系。
+ * 一个范围可能存在于一个阶段内（如地图），也可能跨越多个作业（如采取）。
  */
 @JsonInclude(Include.NON_NULL)
 @JsonPropertyOrder(Array("id", "name", "parent"))
@@ -77,16 +84,18 @@ private[spark] class RDDOperationScope(
 /**
  * A collection of utility methods to construct a hierarchical representation of RDD scopes.
  * An RDD scope tracks the series of operations that created a given RDD.
+ * 用于构建 RDD 作用域分层表示的实用方法的集合。
+ * 一个RDD作用域可以跟踪创建特定RDD的一系列操作。
  */
 private[spark] object RDDOperationScope extends Logging {
   private val jsonMapper = new ObjectMapper().registerModule(DefaultScalaModule)
-  private val scopeCounter = new AtomicInteger(0)
+  private val scopeCounter = new AtomicInteger(0) // scope的数量
 
   def fromJson(s: String): RDDOperationScope = {
     jsonMapper.readValue(s, classOf[RDDOperationScope])
   }
 
-  /** Return a globally unique operation scope ID. */
+  /** Return a globally unique operation scope ID. 得到一个scopeId */
   def nextScopeId(): Int = scopeCounter.getAndIncrement
 
   /**
@@ -95,6 +104,9 @@ private[spark] object RDDOperationScope extends Logging {
    * same as this method's.
    *
    * Note: Return statements are NOT allowed in body.
+   *
+   * 执行给定的主体，使在该主体中创建的所有 RDD 都具有相同的作用域。
+   * 作用域的名称将是堆栈跟踪中第一个与该方法不同的方法名称。
    */
   private[spark] def withScope[T](
       sc: SparkContext,
@@ -124,6 +136,13 @@ private[spark] object RDDOperationScope extends Logging {
    * is useful for scoping physical operations in Spark SQL, for instance.
    *
    * Note: Return statements are NOT allowed in body.
+   *
+   * 执行给定的主体，使在该主体中创建的所有 RDD 都具有相同的范围。
+   * 如果允许嵌套，在给定主体中对该方法的任何后续调用都将实例化嵌套在我们的作用域中的子作用域。否则，这些调用将不会生效。
+   * 此外，本方法的调用者可以选择忽略上一级调用者设置的配置和作用域。
+   * 在这种情况下，该方法将忽略父级调用者不允许嵌套的意图，并且实例化的新作用域将没有父级。例如，这对于Spark SQL中的物理操作的作用域非常有用。
+   *
+   * 注意：不允许在正文中使用返回语句。
    */
   private[spark] def withScope[T](
       sc: SparkContext,

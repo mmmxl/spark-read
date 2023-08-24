@@ -261,20 +261,25 @@ class PartitioningSuite extends SparkFunSuite with SharedSparkContext with Priva
   }
 
   test("defaultPartitioner") {
+    // 150
     val rdd1 = sc.parallelize((1 to 1000).map(x => (x, x)), 150)
+    // p-10
     val rdd2 = sc.parallelize(Array((1, 2), (2, 3), (2, 4), (3, 4)))
       .partitionBy(new HashPartitioner(10))
+    // p-100
     val rdd3 = sc.parallelize(Array((1, 6), (7, 8), (3, 10), (5, 12), (13, 14)))
       .partitionBy(new HashPartitioner(100))
+    // p-9
     val rdd4 = sc.parallelize(Array((1, 2), (2, 3), (2, 4), (3, 4)))
       .partitionBy(new HashPartitioner(9))
+    // 11
     val rdd5 = sc.parallelize((1 to 10).map(x => (x, x)), 11)
 
-    val partitioner1 = Partitioner.defaultPartitioner(rdd1, rdd2)
-    val partitioner2 = Partitioner.defaultPartitioner(rdd2, rdd3)
-    val partitioner3 = Partitioner.defaultPartitioner(rdd3, rdd1)
-    val partitioner4 = Partitioner.defaultPartitioner(rdd1, rdd2, rdd3)
-    val partitioner5 = Partitioner.defaultPartitioner(rdd4, rdd5)
+    val partitioner1 = Partitioner.defaultPartitioner(rdd1, rdd2) // 1
+    val partitioner2 = Partitioner.defaultPartitioner(rdd2, rdd3) // 3
+    val partitioner3 = Partitioner.defaultPartitioner(rdd3, rdd1) // 3
+    val partitioner4 = Partitioner.defaultPartitioner(rdd1, rdd2, rdd3) // 3
+    val partitioner5 = Partitioner.defaultPartitioner(rdd4, rdd5) // 4
 
     assert(partitioner1.numPartitions == rdd1.getNumPartitions)
     assert(partitioner2.numPartitions == rdd3.getNumPartitions)
@@ -287,25 +292,30 @@ class PartitioningSuite extends SparkFunSuite with SharedSparkContext with Priva
     assert(!sc.conf.contains("spark.default.parallelism"))
     try {
       sc.conf.set("spark.default.parallelism", "4")
-
+      // 150
       val rdd1 = sc.parallelize((1 to 1000).map(x => (x, x)), 150)
+      // p-10
       val rdd2 = sc.parallelize(Array((1, 2), (2, 3), (2, 4), (3, 4)))
         .partitionBy(new HashPartitioner(10))
+      // p-100
       val rdd3 = sc.parallelize(Array((1, 6), (7, 8), (3, 10), (5, 12), (13, 14)))
         .partitionBy(new HashPartitioner(100))
+      // p-9
       val rdd4 = sc.parallelize(Array((1, 2), (2, 3), (2, 4), (3, 4)))
         .partitionBy(new HashPartitioner(9))
+      // 11
       val rdd5 = sc.parallelize((1 to 10).map(x => (x, x)), 11)
+      // 3
       val rdd6 = sc.parallelize(Array((1, 2), (2, 3), (2, 4), (3, 4)))
         .partitionBy(new HashPartitioner(3))
 
-      val partitioner1 = Partitioner.defaultPartitioner(rdd1, rdd2)
-      val partitioner2 = Partitioner.defaultPartitioner(rdd2, rdd3)
-      val partitioner3 = Partitioner.defaultPartitioner(rdd3, rdd1)
-      val partitioner4 = Partitioner.defaultPartitioner(rdd1, rdd2, rdd3)
-      val partitioner5 = Partitioner.defaultPartitioner(rdd4, rdd5)
-      val partitioner6 = Partitioner.defaultPartitioner(rdd5, rdd5)
-      val partitioner7 = Partitioner.defaultPartitioner(rdd1, rdd6)
+      val partitioner1 = Partitioner.defaultPartitioner(rdd1, rdd2) // p-10 d-4 max-150 -> 2
+      val partitioner2 = Partitioner.defaultPartitioner(rdd2, rdd3) // p-100 d-4 -> 3
+      val partitioner3 = Partitioner.defaultPartitioner(rdd3, rdd1) // p-100 d-4 max=150 -> 3
+      val partitioner4 = Partitioner.defaultPartitioner(rdd1, rdd2, rdd3) // p-100 d-4 max-150 -> 3
+      val partitioner5 = Partitioner.defaultPartitioner(rdd4, rdd5) // p-9 d-4 max-11 -> 4
+      val partitioner6 = Partitioner.defaultPartitioner(rdd5, rdd5) // p-null d-4 max-11 -> default
+      val partitioner7 = Partitioner.defaultPartitioner(rdd1, rdd6) // p-3 d-4 max-150 -> default
 
       assert(partitioner1.numPartitions == rdd2.getNumPartitions)
       assert(partitioner2.numPartitions == rdd3.getNumPartitions)

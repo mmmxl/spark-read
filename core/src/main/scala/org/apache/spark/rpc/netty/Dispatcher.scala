@@ -32,12 +32,14 @@ import org.apache.spark.util.ThreadUtils
 
 /**
  * A message dispatcher, responsible for routing RPC messages to the appropriate endpoint(s).
+ * 一个消息调度器，负责将RPC消息路由到适当的端点。
  *
  * @param numUsableCores Number of CPU cores allocated to the process, for sizing the thread pool.
  *                       If 0, will consider the available CPUs on the host.
  */
 private[netty] class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) extends Logging {
 
+  /* Rpc端点数据，Inbox、RpcEndpoint、NettyRpcEndpointRef关联的实例  */
   private class EndpointData(
       val name: String,
       val endpoint: RpcEndpoint,
@@ -45,21 +47,26 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) exte
     val inbox = new Inbox(ref, endpoint)
   }
 
+  /* 端点实例名称与端点数据EndPointData之间映射关系的缓存 */
   private val endpoints: ConcurrentMap[String, EndpointData] =
     new ConcurrentHashMap[String, EndpointData]
+  /* 端点实例RpcEndpoint与端点实例子引用RpcEndPointRef之间映射关系的缓存 */
   private val endpointRefs: ConcurrentMap[RpcEndpoint, RpcEndpointRef] =
     new ConcurrentHashMap[RpcEndpoint, RpcEndpointRef]
 
   // Track the receivers whose inboxes may contain messages.
+  /* 存储端点数据EndpointData的阻塞队列，只有Inbox中有消息的EndpointData才会被放入此阻塞队列。 */
   private val receivers = new LinkedBlockingQueue[EndpointData]
 
   /**
    * True if the dispatcher has been stopped. Once stopped, all messages posted will be bounced
    * immediately.
+   * Dispatcher是否停止的状态
    */
   @GuardedBy("this")
   private var stopped = false
 
+  /** 注册RpcEndpoint */
   def registerRpcEndpoint(name: String, endpoint: RpcEndpoint): NettyRpcEndpointRef = {
     val addr = RpcEndpointAddress(nettyEnv.address, name)
     val endpointRef = new NettyRpcEndpointRef(nettyEnv.conf, addr, nettyEnv)
@@ -85,6 +92,8 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) exte
   private def unregisterRpcEndpoint(name: String): Unit = {
     val data = endpoints.remove(name)
     if (data != null) {
+      /* Inbox可能正在处理消息，所以不能直接停止，而应该让Inbox自己停止
+         EndpointRef由OnStop删除了 */
       data.inbox.stop()
       receivers.offer(data)  // for the OnStop message
     }
@@ -143,7 +152,7 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) exte
 
   /**
    * Posts a message to a specific endpoint.
-   *
+   * 将消息提交给指定的RpcEndPoint
    * @param endpointName name of the endpoint.
    * @param message the message to post
    * @param callbackIfStopped callback function if the endpoint is stopped.
@@ -178,6 +187,7 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) exte
     // Stop all endpoints. This will queue all endpoints for processing by the message loops.
     endpoints.keySet().asScala.foreach(unregisterRpcEndpoint)
     // Enqueue a message that tells the message loops to stop.
+    // 杀死MessageLoop线程
     receivers.offer(PoisonPill)
     threadpool.shutdown()
   }
@@ -193,7 +203,10 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) exte
     endpoints.containsKey(name)
   }
 
-  /** Thread pool used for dispatching messages. */
+  /** Thread pool used for dispatching messages.
+   * 用于对消息进行调度的线程池，此线程运行的任务都是MessageLoop
+   * 创建固定大小的线程池，启动的线程都以后台线程方式运行，且线程名以dispatcher-event-loop为前缀
+   * */
   private val threadpool: ThreadPoolExecutor = {
     val availableCores =
       if (numUsableCores > 0) numUsableCores else Runtime.getRuntime.availableProcessors()
@@ -206,13 +219,19 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) exte
     pool
   }
 
-  /** Message loop used for dispatching messages. */
+  /** Message loop used for dispatching messages.
+   * 1.从receivers中获取EndpointData.receivers中的EndpointData,其Inbox的messages列表中肯定有了新的消息
+   *   receivers是一个阻塞队列，没有消息，MessageLoop线程会被阻塞
+   * 2.如果取到的是PoisonPill就会return(因为thread pool可能不止一个MessageLoop线程，需要将PoisonPill放回杀死其他线程)
+   * 3.如果取到的EndpointData不是PoisonPill,那么调用EndpointData的Inbox的process方法
+   * */
   private class MessageLoop extends Runnable {
     override def run(): Unit = {
       try {
         while (true) {
           try {
             val data = receivers.take()
+            /* 这里是一个出口 */
             if (data == PoisonPill) {
               // Put PoisonPill back so that other MessageLoops can see it.
               receivers.offer(PoisonPill)
@@ -229,6 +248,7 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) exte
           try {
             // Re-submit a MessageLoop so that Dispatcher will still work if
             // UncaughtExceptionHandler decides to not kill JVM.
+            // 重新提交一个MessageLoop，这样如果UncaughtExceptionHandler决定不杀死JVM，Dispatcher仍然会工作。
             threadpool.execute(new MessageLoop)
           } finally {
             throw t
@@ -237,6 +257,8 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) exte
     }
   }
 
-  /** A poison endpoint that indicates MessageLoop should exit its message loop. */
+  /** A poison endpoint that indicates MessageLoop should exit its message loop.
+   * 一个毒药端点，表示MessageLoop应该退出其消息循环。
+   */
   private val PoisonPill = new EndpointData(null, null, null)
 }

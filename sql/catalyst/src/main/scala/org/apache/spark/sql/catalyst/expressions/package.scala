@@ -55,11 +55,13 @@ import org.apache.spark.sql.types.{StructField, StructType}
  *
  * ==Evaluation==
  * The result of expressions can be evaluated using the `Expression.apply(Row)` method.
+ * 表达式的结果可以使用`Expression.apply(Row)`方法进行评估。
  */
 package object expressions  {
 
   /**
    * Used as input into expressions whose output does not depend on any input value.
+   * 用作输出不依赖于任何输入值的表达式的输入
    */
   val EmptyRow: InternalRow = null
 
@@ -67,6 +69,8 @@ package object expressions  {
    * Converts a [[InternalRow]] to another Row given a sequence of expression that define each
    * column of the new row. If the schema of the input row is specified, then the given expression
    * will be bound to that schema.
+   * 将一个[[InternalRow]]转换为另一个Row，给定的expression定义了新行的每一列。
+   * 如果指定了输入行的schema，那么给定的expression将与该schema绑定。
    */
   abstract class Projection extends (InternalRow => InternalRow) {
 
@@ -74,12 +78,16 @@ package object expressions  {
      * Initializes internal states given the current partition index.
      * This is used by nondeterministic expressions to set initial states.
      * The default implementation does nothing.
+     * 初始化给定当前分区索引的内部状态
+     * 这被非确定性表达式用来设置初始状态
+     * 默认的实现不做任何事情
      */
     def initialize(partitionIndex: Int): Unit = {}
   }
 
   /**
    * An identity projection. This returns the input row.
+   * 不做任何改变
    */
   object IdentityProjection extends Projection {
     override def apply(row: InternalRow): InternalRow = row
@@ -95,6 +103,14 @@ package object expressions  {
    * projection, but means that it is not safe to hold on to a reference to a [[InternalRow]] after
    * `next()` has been called on the [[Iterator]] that produced it. Instead, the user must call
    * `InternalRow.copy()` and hold on to the returned [[InternalRow]] before calling `next()`.
+   *
+   * 将一个[[InternalRow]]转换为另一个Row，给定的表达式序列定义了新行的每一列。
+   * 如果指定了输入行的模式，那么给定的表达式将与该模式绑定。
+   *
+   * 与普通的投影不同，MutableProjection每次添加输入行时都会重复使用相同的底层行对象。
+   * 这大大降低了计算投影的成本，但意味着在对产生[[InternalRow]]的迭代器调用 "next() "后，
+   * 保留对[[InternalRow]]的引用是不安全的。相反，用户必须调用`InternalRow.copy()`，
+   * 并在调用`next()`之前保持住返回的[[InternalRow]]。
    */
   abstract class MutableProjection extends Projection {
     def currentValue: InternalRow
@@ -147,7 +163,10 @@ package object expressions  {
       m.mapValues(_.distinct).map(identity)
     }
 
-    /** Map to use for direct case insensitive attribute lookups. */
+    /** Map to use for direct case insensitive attribute lookups.
+     * 按照Attribute.name分组,并做组内去重
+     *
+     */
     @transient private lazy val direct: Map[String, Seq[Attribute]] = {
       unique(attrs.groupBy(_.name.toLowerCase(Locale.ROOT)))
     }
@@ -172,7 +191,9 @@ package object expressions  {
       unique(grouped)
     }
 
-    /** Perform attribute resolution given a name and a resolver. */
+    /** Perform attribute resolution given a name and a resolver.
+     * 给定名称和解析器，执行属性解析
+     */
     def resolve(nameParts: Seq[String], resolver: Resolver): Option[NamedExpression] = {
       // Collect matching attributes given a name and a lookup.
       def collectMatches(name: String, candidates: Option[Seq[Attribute]]): Seq[Attribute] = {
@@ -264,7 +285,8 @@ package object expressions  {
   /**
    * When an expression inherits this, meaning the expression is null intolerant (i.e. any null
    * input will result in null output). We will use this information during constructing IsNotNull
-   * constraints.
+   *
+   * 一个标记trait, 继承该接口的expression,null => null
    */
   trait NullIntolerant extends Expression
 }

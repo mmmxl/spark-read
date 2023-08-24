@@ -36,6 +36,9 @@ import org.apache.spark.util.{ThreadUtils, Utils}
 /**
  * BlockManagerMasterEndpoint is an [[ThreadSafeRpcEndpoint]] on the master node to track statuses
  * of all slaves' block managers.
+ *
+ * BlockManagerMasterEndpoint接收Driver或Executor上BlockManagerMaster发送的消息，
+ * 对所有的BlockManager统一管理。BlockManagerMasterEndpoint定义了一些管理BlockManager的属性
  */
 private[spark]
 class BlockManagerMasterEndpoint(
@@ -46,6 +49,7 @@ class BlockManagerMasterEndpoint(
   extends ThreadSafeRpcEndpoint with Logging {
 
   // Mapping from block manager id to the block manager's information.
+  // BlockManagerId与BlockManagerInfo的映射关系
   private val blockManagerInfo = new mutable.HashMap[BlockManagerId, BlockManagerInfo]
 
   // Mapping from executor ID to block manager ID.
@@ -368,6 +372,7 @@ class BlockManagerMasterEndpoint(
 
     val time = System.currentTimeMillis()
     if (!blockManagerInfo.contains(id)) {
+      // blockManagerInfo缓存中不存在此BlockManagerId
       blockManagerIdByExecutor.get(id.executorId) match {
         case Some(oldId) =>
           // A block manager of the same executor already exists, so remove it (assumed dead)
@@ -481,8 +486,16 @@ class BlockManagerMasterEndpoint(
   }
 }
 
+/**
+ * 封装Block的状态信息
+ * @param storageLevel Block的StorageLevel
+ * @param memSize Block占用的内存大小
+ * @param diskSize Block占用的磁盘大小
+ */
 @DeveloperApi
 case class BlockStatus(storageLevel: StorageLevel, memSize: Long, diskSize: Long) {
+
+  // 是否存储到存储体系中
   def isCached: Boolean = memSize + diskSize > 0
 }
 

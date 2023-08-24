@@ -26,6 +26,10 @@ import org.apache.hadoop.io.Writable
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.util.Utils
 
+/**
+ * 继承自hadoop的Writable接口
+ * 实现的序列化的写功能
+ */
 @DeveloperApi
 class SerializableWritable[T <: Writable](@transient var t: T) extends Serializable {
 
@@ -33,12 +37,25 @@ class SerializableWritable[T <: Writable](@transient var t: T) extends Serializa
 
   override def toString: String = t.toString
 
+  /**
+   * 1.读取非static和transient字段到流中
+   * 2.transient修饰的t写入out流中
+   */
   private def writeObject(out: ObjectOutputStream): Unit = Utils.tryOrIOException {
+    // 将当前类的非静态和非瞬时字段写到这个流中
+    // 这只能从被序列化的类的writeObject方法中调用。如果以其他方式调用，它将抛出NotActiveException
     out.defaultWriteObject()
     new ObjectWritable(t).write(out)
   }
 
+  /**
+   * 1.从流中读取当前类的非static和transient字段
+   * 2.创建ObjectWritable对象
+   * 3.读取字段
+   */
   private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
+    // 从这个流中读取当前类的非静态和非瞬时字段
+    // 这只能从被反序列化的类的readObject方法中调用。如果以其他方式调用，它将抛出NotActiveException。
     in.defaultReadObject()
     val ow = new ObjectWritable()
     ow.setConf(new Configuration(false))

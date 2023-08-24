@@ -28,11 +28,13 @@ import org.apache.spark.util.{ThreadUtils, Utils}
 /**
  * An RpcEndpoint to take commands from the master to execute options. For example,
  * this is used to remove blocks from the slave's BlockManager.
+ *
+ * BlockManagerSlaveEndpoint用于接受BlockManagerMasterEndpoint的命令并执行相应的操作。
  */
 private[storage]
 class BlockManagerSlaveEndpoint(
     override val rpcEnv: RpcEnv,
-    blockManager: BlockManager,
+    blockManager: BlockManager, // 持有blockManager
     mapOutputTracker: MapOutputTracker)
   extends ThreadSafeRpcEndpoint with Logging {
 

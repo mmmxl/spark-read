@@ -28,21 +28,24 @@ import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
  * there are two type of Schedulable entities(Pools and TaskSetManagers)
  */
 private[spark] trait Schedulable {
-  var parent: Pool
+  var parent: Pool // 当前Pool的父Pool
   // child queues
   def schedulableQueue: ConcurrentLinkedQueue[Schedulable]
   def schedulingMode: SchedulingMode
-  def weight: Int
-  def minShare: Int
-  def runningTasks: Int
-  def priority: Int
+  def weight: Int // 公平调度的权重
+  def minShare: Int // 公平调度的参考值
+  def runningTasks: Int // 当前正在运行的任务数量
+  def priority: Int // 进行调度的优先级
   def stageId: Int
   def name: String
 
   def addSchedulable(schedulable: Schedulable): Unit
   def removeSchedulable(schedulable: Schedulable): Unit
   def getSchedulableByName(name: String): Schedulable
+
+  /** 用于当某个Executor丢失后，将在此Executor上执行的Task作为失败任务处理，并重新提交这些任务 */
   def executorLost(executorId: String, host: String, reason: ExecutorLossReason): Unit
+  /** 用于检查当前Pool中是否有需要推测执行的任务 */
   def checkSpeculatableTasks(minTimeToSpeculation: Int): Boolean
   def getSortedTaskSetQueue: ArrayBuffer[TaskSetManager]
 }

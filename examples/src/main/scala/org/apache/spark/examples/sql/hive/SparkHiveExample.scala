@@ -43,6 +43,7 @@ object SparkHiveExample {
 
     val spark = SparkSession
       .builder()
+      .master("local[4]")
       .appName("Spark Hive Example")
       .config("spark.sql.warehouse.dir", warehouseLocation)
       .enableHiveSupport()

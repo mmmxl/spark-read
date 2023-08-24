@@ -73,9 +73,16 @@ private[sql] object Dataset {
     dataset
   }
 
+  /**
+   * 会创建一个查询执行器，然后根据物理执行计划创建DataSet
+   */
   def ofRows(sparkSession: SparkSession, logicalPlan: LogicalPlan): DataFrame = {
+    // 这里创建QueryExecution
+    // QueryExecution是为Spark执行关系型查询的主要工作流，它包含了所有的执行计划
     val qe = sparkSession.sessionState.executePlan(logicalPlan)
+    // 执行qe中的analyzed阶段
     qe.assertAnalyzed()
+    // DataFrame是DataSet[Row]的别名 定义在包对象中
     new Dataset[Row](sparkSession, qe, RowEncoder(qe.analyzed.schema))
   }
 }
@@ -93,7 +100,7 @@ private[sql] object Dataset {
  * Datasets are "lazy", i.e. computations are only triggered when an action is invoked. Internally,
  * a Dataset represents a logical plan that describes the computation required to produce the data.
  * When an action is invoked, Spark's query optimizer optimizes the logical plan and generates a
- * physical plan for efficient execution in a parallel and distributed manner. To explore the
+ * physical plan for efficient execution in a parallel and distributed manner(方式). To explore the
  * logical plan as well as optimized physical plan, use the `explain` function.
  *
  * To efficiently support domain-specific objects, an [[Encoder]] is required. The encoder maps
@@ -128,14 +135,14 @@ private[sql] object Dataset {
  *   Column ageCol = people.col("age"); // in Java
  * }}}
  *
- * Note that the [[Column]] type can also be manipulated through its various functions.
+ * Note that the [[Column]] type can also be manipulated(操控) through its various functions.
  * {{{
  *   // The following creates a new column that increases everybody's age by 10.
  *   people("age") + 10  // in Scala
  *   people.col("age").plus(10);  // in Java
  * }}}
  *
- * A more concrete example in Scala:
+ * A more concrete(具体的) example in Scala:
  * {{{
  *   // To create Dataset[Row] using SparkSession
  *   val people = spark.read.parquet("...")
@@ -189,6 +196,7 @@ class Dataset[T] private[sql](
   @transient private[sql] val logicalPlan: LogicalPlan = {
     // For various commands (like DDL) and queries with side effects, we force query execution
     // to happen right away to let these side effects take place eagerly.
+    // DDL和有副作用的操作立即发生
     queryExecution.analyzed match {
       case c: Command =>
         LocalRelation(c.output, withAction("command", queryExecution)(_.executeCollect()))
@@ -225,6 +233,7 @@ class Dataset[T] private[sql](
       }
   }
 
+  // 获取数字类型的列
   private[sql] def numericColumns: Seq[Expression] = {
     schema.fields.filter(_.dataType.isInstanceOf[NumericType]).map { n =>
       queryExecution.analyzed.resolveQuoted(n.name, sparkSession.sessionState.analyzer.resolver).get
@@ -397,6 +406,7 @@ class Dataset[T] private[sql](
    * strongly typed objects that Dataset operations work on, a Dataframe returns generic [[Row]]
    * objects that allow fields to be accessed by ordinal or name.
    *
+   * DataSet -> DatFrame
    * @group basic
    * @since 1.6.0
    */
@@ -605,10 +615,11 @@ class Dataset[T] private[sql](
   /**
    * Returns a checkpointed version of this Dataset.
    *
-   * @param eager Whether to checkpoint this dataframe immediately
+   * @param eager Whether to checkpoint this dataframe immediately 是否立刻checkpoint该DF
    * @param reliableCheckpoint Whether to create a reliable checkpoint saved to files inside the
    *                           checkpoint directory. If false creates a local checkpoint using
    *                           the caching subsystem
+   *                           true用可靠的文件系统来实现checkpoint,false用缓存系统来实现
    */
   private def checkpoint(eager: Boolean, reliableCheckpoint: Boolean): Dataset[T] = {
     val internalRdd = queryExecution.toRdd.map(_.copy())

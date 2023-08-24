@@ -68,6 +68,9 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
    * Users should not expect a specific directionality. If a specific directionality is needed,
    * transformExpressionsDown or transformExpressionsUp should be used.
    *
+   * 对该查询操作符中出现的所有表达式运行[[transformExpressionsDown]]，并带有`rule`。
+   * 用户不应期望有特定的方向性。如果需要特定的方向性，应该使用transformExpressionsDown或transformExpressionsUp。
+   *
    * @param rule the rule to be applied to every expression in this operator.
    */
   def transformExpressions(rule: PartialFunction[Expression, Expression]): this.type = {
@@ -275,6 +278,10 @@ object QueryPlan extends PredicateHelper {
    * with its referenced ordinal from input attributes. It's similar to `BindReferences` but we
    * do not use `BindReferences` here as the plan may take the expression as a parameter with type
    * `Attribute`, and replace it with `BoundReference` will cause error.
+   *
+   * 通过更新`AttributeReference`中的exprId与输入属性中的引用序数，
+   * 规范化给定表达式中的exprIds。它类似于`BindReferences`，但我们在这里不使用`BindReferences`，
+   * 因为计划可能会把表达式作为类型为`Attribute`的参数，用`BoundReference`替换会导致错误。
    */
   def normalizeExprId[T <: Expression](e: T, input: AttributeSeq): T = {
     e.transformUp {

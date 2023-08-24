@@ -19,17 +19,14 @@ package org.apache.spark.storage
 
 import java.io._
 import java.nio.ByteBuffer
-import java.nio.channels.{Channels, ReadableByteChannel, WritableByteChannel}
+import java.nio.channels.{Channels, FileChannel, ReadableByteChannel, WritableByteChannel}
 import java.nio.channels.FileChannel.MapMode
 import java.util.concurrent.ConcurrentHashMap
-
 import scala.collection.mutable.ListBuffer
-
 import com.google.common.io.Closeables
 import io.netty.channel.DefaultFileRegion
-
 import org.apache.spark.{SecurityManager, SparkConf}
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.{Logging, config}
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.util.{AbstractFileRegion, JavaUtils}
 import org.apache.spark.security.CryptoStreamUtils
@@ -39,21 +36,33 @@ import org.apache.spark.util.io.ChunkedByteBuffer
 
 /**
  * Stores BlockManager blocks on disk.
+ * 负责将Block存储到磁盘
  */
 private[spark] class DiskStore(
     conf: SparkConf,
     diskManager: DiskBlockManager,
     securityManager: SecurityManager) extends Logging {
 
+  // 读取磁盘中的Block时，是直接读取还是使用FileChannel的内存镜像映射方法读取的阈值
+  // FileChannel的map方法提供的快速读写技术，实质上是将通道所连接的数据节点中的全部或部分
+  // 数据直接映射到内存的一个Buffer中，而这个内存Buffer块就是节点数据的映像，你直接对这个Buffer
+  // 进行修改，会影响到节点数据。这个Buffer叫做MappedBuffer，即镜像Buffer。由于是内存镜像，因此处理速度快。
   private val minMemoryMapBytes = conf.getSizeAsBytes("spark.storage.memoryMapThreshold", "2m")
+  // 只有测试用，spark.storage.memoryMapLimitForTests
   private val maxMemoryMapBytes = conf.get(config.MEMORY_MAP_LIMIT_FOR_TESTS)
+  // 记录每一个block的大小
   private val blockSizes = new ConcurrentHashMap[BlockId, Long]()
 
   def getSize(blockId: BlockId): Long = blockSizes.get(blockId)
 
   /**
    * Invokes the provided callback function to write the specific block.
+   * 将BlockId所对应的Block写入磁盘
+   * 1.调用contains()方法判断给定BlockId所对应的Block文件是否存在，当存在时进入下一步
+   * 2.调用DiskBlockManager的getFile()方法获取BlockId所对应的Block文件，并打开文件输出流
+   * 3.调用回调函数writeFunc()，对Block文件写入。当写入失败时，还需要调用remove()方法删除BlockId所对应的Block文件
    *
+   * PS：由put()方法可知Block是不可变的，一次性写入，后续不可以追加或者修改
    * @throws IllegalStateException if the block already exists in the disk store.
    */
   def put(blockId: BlockId)(writeFunc: WritableByteChannel => Unit): Unit = {
@@ -91,12 +100,19 @@ private[spark] class DiskStore(
       finishTime - startTime))
   }
 
+  /** 将BlockId所对应的Block写入磁盘，Block的内容已经封装为ChunkedByteBuffer */
   def putBytes(blockId: BlockId, bytes: ChunkedByteBuffer): Unit = {
     put(blockId) { channel =>
       bytes.writeFully(channel)
     }
   }
 
+  /** 读取给定BlockId所对应的Block，并封装成ChunkedByteBuffer返回
+   * 1.读取file和size
+   * 2.securityManager验证是否加密
+   *   Y > 返回 EncryptedBlockData
+   *   N > 返回 DiskBlockData
+   */
   def getBytes(blockId: BlockId): BlockData = {
     val file = diskManager.getFile(blockId.name)
     val blockSize = getSize(blockId)
@@ -105,6 +121,7 @@ private[spark] class DiskStore(
       case Some(key) =>
         // Encrypted blocks cannot be memory mapped; return a special object that does decryption
         // and provides InputStream / FileRegion implementations for reading the data.
+        // 加密的块不能被内存映射；返回一个特殊的对象，该对象进行解密并提供InputStream / FileRegion实现以读取数据。
         new EncryptedBlockData(file, blockSize, conf, key)
 
       case _ =>
@@ -112,6 +129,10 @@ private[spark] class DiskStore(
     }
   }
 
+  /** 删除对应blockId的Block
+   * 1.从blockSizes中删除
+   * 2.删除block对应的二级目录
+   */
   def remove(blockId: BlockId): Boolean = {
     blockSizes.remove(blockId)
     val file = diskManager.getFile(blockId.name)
@@ -126,13 +147,15 @@ private[spark] class DiskStore(
     }
   }
 
+  /** 是否存在指定blockId的Block */
   def contains(blockId: BlockId): Boolean = {
     val file = diskManager.getFile(blockId.name)
     file.exists()
   }
 
+  /** 为File创建一个WritableByteChannel */
   private def openForWrite(file: File): WritableByteChannel = {
-    val out = new FileOutputStream(file).getChannel()
+    val out: FileChannel = new FileOutputStream(file).getChannel()
     try {
       securityManager.getIOEncryptionKey().map { key =>
         CryptoStreamUtils.createWritableChannel(out, conf, key)
@@ -147,6 +170,10 @@ private[spark] class DiskStore(
 
 }
 
+/**
+ * DiskBlock的数据类
+ * 里面是获取各种流的方法
+ */
 private class DiskBlockData(
     minMemoryMapBytes: Long,
     maxMemoryMapBytes: Long,
@@ -322,6 +349,7 @@ private class ReadableChannelFileRegion(source: ReadableByteChannel, blockSize: 
   override def deallocate(): Unit = source.close()
 }
 
+/** WritableByteChannel的增强，增加了计数能力 */
 private class CountingWritableChannel(sink: WritableByteChannel) extends WritableByteChannel {
 
   private var count = 0L

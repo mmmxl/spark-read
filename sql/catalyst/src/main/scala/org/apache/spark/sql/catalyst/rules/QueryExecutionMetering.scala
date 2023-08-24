@@ -27,7 +27,9 @@ case class QueryExecutionMetering() {
   private val numEffectiveRunsMap = AtomicLongMap.create[String]()
   private val timeEffectiveRunsMap = AtomicLongMap.create[String]()
 
-  /** Resets statistics about time spent running specific rules */
+  /** Resets statistics about time spent running specific rules
+   * 清空4个map
+   */
   def resetMetrics(): Unit = {
     timeMap.clear()
     numRunsMap.clear()
@@ -59,15 +61,17 @@ case class QueryExecutionMetering() {
     numRunsMap.incrementAndGet(ruleName)
   }
 
-  /** Dump statistics about time spent running specific rules. */
+  /** Dump statistics about time spent running specific rules.
+   * 打印执行rule花费的时间
+   */
   def dumpTimeSpent(): String = {
     val map = timeMap.asMap().asScala
     val maxLengthRuleNames = map.keys.map(_.toString.length).max
-
+    // PadTo() 对齐
     val colRuleName = "Rule".padTo(maxLengthRuleNames, " ").mkString
     val colRunTime = "Effective Time / Total Time".padTo(len = 47, " ").mkString
     val colNumRuns = "Effective Runs / Total Runs".padTo(len = 47, " ").mkString
-
+    //
     val ruleMetrics = map.toSeq.sortBy(_._2).reverseMap { case (name, time) =>
       val timeEffectiveRun = timeEffectiveRunsMap.get(name)
       val numRuns = numRunsMap.get(name)

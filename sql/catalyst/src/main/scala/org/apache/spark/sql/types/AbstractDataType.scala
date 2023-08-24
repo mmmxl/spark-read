@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.Expression
 
 /**
  * A non-concrete data type, reserved for internal uses.
+ * 一个非具体的数据类型，保留给内部使用。
  */
 private[sql] abstract class AbstractDataType {
   /**
@@ -34,7 +35,7 @@ private[sql] abstract class AbstractDataType {
   /**
    * Returns true if `other` is an acceptable input type for a function that expects this,
    * possibly abstract DataType.
-   *
+   * 可以接受的数据类型
    * {{{
    *   // this should return true
    *   DecimalType.acceptsType(DecimalType(10, 2))
@@ -53,7 +54,7 @@ private[sql] abstract class AbstractDataType {
 /**
  * A collection of types that can be used to specify type constraints. The sequence also specifies
  * precedence: an earlier type takes precedence over a latter type.
- *
+ * 一个类型的集合，可以用来指定类型约束。该序列还指定了优先级：前一个类型优先于后一个类型。
  * {{{
  *   TypeCollection(StringType, BinaryType)
  * }}}
@@ -110,6 +111,7 @@ protected[sql] object AnyDataType extends AbstractDataType {
 
 /**
  * An internal type used to represent everything that is not null, UDTs, arrays, structs, and maps.
+ * 表示一个基本类型
  */
 protected[sql] abstract class AtomicType extends DataType {
   private[sql] type InternalType
@@ -154,7 +156,7 @@ private[spark] object NumericType extends AbstractDataType {
    * }}}
    */
   def unapply(e: Expression): Boolean = e.dataType.isInstanceOf[NumericType]
-
+  /** 默认提供double类型 */
   override private[spark] def defaultConcreteType: DataType = DoubleType
 
   override private[spark] def simpleString: String = "numeric"

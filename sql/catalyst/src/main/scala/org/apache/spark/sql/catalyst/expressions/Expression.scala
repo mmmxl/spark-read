@@ -37,20 +37,24 @@ import org.apache.spark.util.Utils
  * If an expression wants to be exposed in the function registry (so users can call it with
  * "name(arguments...)", the concrete implementation must be a case class whose constructor
  * arguments are all Expressions types. See [[Substring]] for an example.
+ * Catalyst的expression。
+ *
+ * 如果一个expression想在函数注册表中公开（所以用户可以用"name(arguments...)"，
+ * 具体实现必须是一个样例类，其构造函数是参数都是Expressions类型。参见[[Substring]]的例子。
  *
  * There are a few important traits:
  *
- * - [[Nondeterministic]]: an expression that is not deterministic.
+ * - [[Nondeterministic]]: an expression that is not deterministic. 不确定的
  * - [[Unevaluable]]: an expression that is not supposed to be evaluated.
  * - [[CodegenFallback]]: an expression that does not have code gen implemented and falls back to
- *                        interpreted mode.
+ *                        interpreted mode. 一个没有实现codegen的表达式，回到解释模式
  *
- * - [[LeafExpression]]: an expression that has no child.
- * - [[UnaryExpression]]: an expression that has one child.
- * - [[BinaryExpression]]: an expression that has two children.
- * - [[TernaryExpression]]: an expression that has three children.
+ * - [[LeafExpression]]: an expression that has no child. 无参表示式
+ * - [[UnaryExpression]]: an expression that has one child. 一元表达式
+ * - [[BinaryExpression]]: an expression that has two children. 二元表达式
+ * - [[TernaryExpression]]: an expression that has three children. 三元表达式
  * - [[BinaryOperator]]: a special case of [[BinaryExpression]] that requires two children to have
- *                       the same output data type.
+ *                       the same output data type. 二进制表达式的一种特殊情况，需要有两个子句。
  *
  */
 abstract class Expression extends TreeNode[Expression] {
@@ -58,8 +62,10 @@ abstract class Expression extends TreeNode[Expression] {
   /**
    * Returns true when an expression is a candidate for static evaluation before the query is
    * executed.
+   * 当一个表达式在执行查询之前是静态评估的候选者时，返回true。
    *
    * The following conditions are used to determine suitability for constant folding:
+   * 以下条件用于确定是否适合永久折叠
    *  - A [[Coalesce]] is foldable if all of its children are foldable
    *  - A [[BinaryExpression]] is foldable if its both left and right child are foldable
    *  - A [[Not]], [[IsNull]], or [[IsNotNull]] is foldable if its child is foldable
@@ -71,15 +77,23 @@ abstract class Expression extends TreeNode[Expression] {
   /**
    * Returns true when the current expression always return the same result for fixed inputs from
    * children.
+   * 当前表达式对固定的输入总是返回相同的结果时，返回true。儿童。
    *
    * Note that this means that an expression should be considered as non-deterministic if:
    * - it relies on some mutable internal state, or
    * - it relies on some implicit input that is not part of the children expression list.
    * - it has non-deterministic child or children.
    * - it assumes the input satisfies some certain condition via the child operator.
+   * 请注意，这意味着一个表达式在以下情况下应被视为非确定性的：
+   * - 它依赖于一些可改变的内部状态
+   * - 它依赖于一些不属于子表达式列表的隐式输入。
+   * - 它有一个或多个非确定的子句。
+   * - 它假定输入通过子运算符满足某些条件。
    *
    * An example would be `SparkPartitionID` that relies on the partition id returned by TaskContext.
    * By default leaf expressions are deterministic as Nil.forall(_.deterministic) returns true.
+   * 一个例子是`SparkPartitionID`，它依赖于TaskContext返回的分区ID。
+   * 默认情况下，叶表达式是确定性的，因为Nil.forall(_.deterministic)返回true。
    */
   lazy val deterministic: Boolean = children.forall(_.deterministic)
 
@@ -87,12 +101,15 @@ abstract class Expression extends TreeNode[Expression] {
 
   def references: AttributeSet = AttributeSet(children.flatMap(_.references.iterator))
 
-  /** Returns the result of evaluating this expression on a given input Row */
+  /** Returns the result of evaluating this expression on a given input Row
+   * 返回在给定输入行上计算此表达式的结果
+   */
   def eval(input: InternalRow = null): Any
 
   /**
    * Returns an [[ExprCode]], that contains the Java source code to generate the result of
    * evaluating the expression on an input row.
+   * 返回一个 [[ExprCode]]，其中包含用于生成输入行上的表达式求值结果的 Java 源代码。
    *
    * @param ctx a [[CodegenContext]]
    * @return [[ExprCode]]
@@ -152,6 +169,8 @@ abstract class Expression extends TreeNode[Expression] {
    * Returns Java source code that can be compiled to evaluate this expression.
    * The default behavior is to call the eval method of the expression. Concrete expression
    * implementations should override this to do actual code generation.
+   * 返回可被编译以评估该表达式的Java源代码。
+   * 默认的行为是调用该表达式的eval方法。具体的表达式实现应该覆盖这个方法来进行实际的代码生成。
    *
    * @param ctx a [[CodegenContext]]
    * @param ev an [[ExprCode]] with unique terms.
@@ -177,6 +196,7 @@ abstract class Expression extends TreeNode[Expression] {
   /**
    * Returns true if  all the children of this expression have been resolved to a specific schema
    * and false if any still contains any unresolved placeholders.
+   * 如果该表达式的所有子代都已解析到特定的模式，则返回true；如果任何子代仍包含任何未解析的占位符，则返回false。
    */
   def childrenResolved: Boolean = children.forall(_.resolved)
 
@@ -187,6 +207,7 @@ abstract class Expression extends TreeNode[Expression] {
    *
    * `deterministic` expressions where `this.canonicalized == other.canonicalized` will always
    * evaluate to the same result.
+   * canonicalized:规范化
    */
   lazy val canonicalized: Expression = {
     val canonicalizedChildren = children.map(_.canonicalized)
@@ -206,6 +227,8 @@ abstract class Expression extends TreeNode[Expression] {
    * Returns a `hashCode` for the calculation performed by this expression. Unlike the standard
    * `hashCode`, an attempt has been made to eliminate cosmetic differences.
    *
+   * 返回该表达式所进行的计算的`hashCode`。与标准的`hashCode`不同，我们试图消除外观上的差异。
+   *
    * See [[Canonicalize]] for more details.
    */
   def semanticHash(): Int = canonicalized.hashCode()
@@ -214,6 +237,9 @@ abstract class Expression extends TreeNode[Expression] {
    * Checks the input data types, returns `TypeCheckResult.success` if it's valid,
    * or returns a `TypeCheckResult` with an error message if invalid.
    * Note: it's not valid to call this method until `childrenResolved == true`.
+   *
+   * 检查输入的数据类型，如果有效则返回`TypeCheckResult.success`，如果无效则返回`TypeCheckResult`并附带错误信息。
+   * 注意：在`childrenResolved == true`之前，调用这个方法是无效的。
    */
   def checkInputDataTypes(): TypeCheckResult = TypeCheckResult.TypeCheckSuccess
 
@@ -230,6 +256,7 @@ abstract class Expression extends TreeNode[Expression] {
 
   // Marks this as final, Expression.verboseString should never be called, and thus shouldn't be
   // overridden by concrete classes.
+  // 将此标记为final，Expression.verboseString永远不应该被调用，因此不应该被具体类覆盖
   final override def verboseString: String = simpleString
 
   override def simpleString: String = toString
@@ -251,6 +278,7 @@ abstract class Expression extends TreeNode[Expression] {
 /**
  * An expression that cannot be evaluated. Some expressions don't live past analysis or optimization
  * time (e.g. Star). This trait is used by those expressions.
+ * 一个不能被计算的表达式。有些表达式不能活过分析或优化时间（如Star）。这些表达式使用了这一特征。
  */
 trait Unevaluable extends Expression {
 
@@ -271,6 +299,12 @@ trait Unevaluable extends Expression {
  * case class constructor, and define a normal constructor that accepts only the original
  * parameters. For an example, see [[Nvl]]. To make sure the explain plan and expression SQL
  * works correctly, the implementation should also override flatArguments method and sql method.
+ *
+ *  一个表达式，在运行时（目前由优化器）被替换成不同的表达式进行评估。
+ *  这主要用于提供与其他数据库的兼容性。例如，我们用它来支持 "nvl"，用 "coalesce "替换它。
+ *  一个RuntimeReplaceable应该有原始参数以及一个 "子 "表达式在
+ *  样例类构造函数，并定义一个只接受原始参数的普通构造函数。
+ *  关于例子，请看[[Nvl]]。为了确保解释计划和表达式SQL 正确地工作，实现也应该覆盖flatArguments方法和sql方法。
  */
 trait RuntimeReplaceable extends UnaryExpression with Unevaluable {
   override def nullable: Boolean = child.nullable
@@ -286,6 +320,7 @@ trait RuntimeReplaceable extends UnaryExpression with Unevaluable {
 /**
  * Expressions that don't have SQL representation should extend this trait.  Examples are
  * `ScalaUDF`, `ScalaUDAF`, and object expressions like `MapObjects` and `Invoke`.
+ *  没有SQL表示的表达式应该扩展这个特性。 例如`ScalaUDF`、`ScalaUDAF`以及`MapObjects`和`Invoke`等对象表达式
  */
 trait NonSQLExpression extends Expression {
   final override def sql: String = {
@@ -299,6 +334,7 @@ trait NonSQLExpression extends Expression {
 
 /**
  * An expression that is nondeterministic.
+ * 一个不确定的表达式
  */
 trait Nondeterministic extends Expression {
   final override lazy val deterministic: Boolean = false
@@ -310,6 +346,7 @@ trait Nondeterministic extends Expression {
   /**
    * Initializes internal states given the current partition index and mark this as initialized.
    * Subclasses should override [[initializeInternal()]].
+   * 初始化给定当前分区索引的内部状态，并将其标记为初始化。子类应该覆盖[[initializeInternal()]]。
    */
   final def initialize(partitionIndex: Int): Unit = {
     initializeInternal(partitionIndex)
@@ -350,11 +387,13 @@ trait Nondeterministic extends Expression {
 trait Stateful extends Nondeterministic {
   /**
    * Return a fresh uninitialized copy of the stateful expression.
+   * 返回一个刷新后的未初始化的克隆
    */
   def freshCopy(): Stateful
 
   /**
    * Only the same reference is considered equal.
+   * 引用比较
    */
   override def fastEquals(other: TreeNode[_]): Boolean = this eq other
 }
@@ -471,6 +510,7 @@ abstract class BinaryExpression extends Expression {
   /**
    * Default behavior of evaluation according to the default nullability of BinaryExpression.
    * If subclass of BinaryExpression override nullable, probably should also override this.
+   * left or right有null返回null, 都没执行nullSafeEval()
    */
   override def eval(input: InternalRow): Any = {
     val value1 = left.eval(input)
@@ -559,6 +599,10 @@ abstract class BinaryExpression extends Expression {
  * 1. The string representation is "x symbol y", rather than "funcName(x, y)".
  * 2. Two inputs are expected to be of the same type. If the two inputs have different types,
  *    the analyzer will find the tightest common type and do the proper type casting.
+ *
+ * 一个二元表达式，是一个运算符，有两个属性。
+ * 1.字符串表示为 "x symbol y"，而不是 "funcName(x, y)"。
+ * 2. 两个输入的类型应该是相同的。如果两个输入有不同的类型，分析器将找到最紧密的共同类型并进行适当的类型转换。
  */
 abstract class BinaryOperator extends BinaryExpression with ExpectsInputTypes {
 
@@ -699,6 +743,8 @@ abstract class TernaryExpression extends Expression {
  * A trait resolving nullable, containsNull, valueContainsNull flags of the output date type.
  * This logic is usually utilized by expressions combining data from multiple child expressions
  * of non-primitive types (e.g. [[CaseWhen]]).
+ *
+ *
  */
 trait ComplexTypeMergingExpression extends Expression {
 

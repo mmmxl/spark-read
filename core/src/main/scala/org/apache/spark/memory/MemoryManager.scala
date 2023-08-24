@@ -40,6 +40,8 @@ import org.apache.spark.unsafe.memory.MemoryAllocator
  * 而存储内存指的是用于缓存和在集群中传播内部数据的内存。每个JVM有一个MemoryManager。
  *
  * 定义从内存池中申请和释放内存的方法,是对memoryPool的包装
+ *
+ * 内存管理的门面类
  */
 private[spark] abstract class MemoryManager(
     conf: SparkConf,
@@ -61,9 +63,9 @@ private[spark] abstract class MemoryManager(
   /* 给堆内池子增加容量 */
   onHeapStorageMemoryPool.incrementPoolSize(onHeapStorageMemory)
   onHeapExecutionMemoryPool.incrementPoolSize(onHeapExecutionMemory)
-  /* 得到堆外大小 */
+  /* 得到堆外大小 spark.memory.offHeap.size 默认为0 */
   protected[this] val maxOffHeapMemory = conf.get(MEMORY_OFFHEAP_SIZE)
-  /* 得到堆外存储大小 */
+  /* 得到堆外存储大小 spark.memory.storageFraction */
   protected[this] val offHeapStorageMemory =
     (maxOffHeapMemory * conf.getDouble("spark.memory.storageFraction", 0.5)).toLong
   /* 给堆外池子增加容量 */
@@ -75,6 +77,7 @@ private[spark] abstract class MemoryManager(
    * depending on the MemoryManager implementation.
    * In this model, this is equivalent to the amount of memory not occupied by execution.
    * 可用于存储的堆内内存总量，以字节为单位。根据MemoryManager的实现，这个数量会随着时间的推移而变化。
+   * 返回用于存储的最大堆内存
    */
   def maxOnHeapStorageMemory: Long
 
@@ -82,6 +85,7 @@ private[spark] abstract class MemoryManager(
    * Total available off heap memory for storage, in bytes. This amount can vary over time,
    * depending on the MemoryManager implementation.
    * 可用于存储的堆外内存总量，以字节为单位。根据MemoryManager的实现，这个数量会随着时间的推移而变化。
+   * 返回用于存储的最大堆外内存
    */
   def maxOffHeapStorageMemory: Long
 
@@ -99,7 +103,7 @@ private[spark] abstract class MemoryManager(
   /**
    * Acquire N bytes of memory to cache the given block, evicting existing ones if necessary.
    *
-   * 从堆内或者堆外内存获取存储所需的内存大小
+   * 从堆内或者堆外内存获取所需大小的内存
    * @return whether all N bytes were successfully granted.
    */
   def acquireStorageMemory(blockId: BlockId, numBytes: Long, memoryMode: MemoryMode): Boolean
@@ -111,7 +115,10 @@ private[spark] abstract class MemoryManager(
    * memory and acquiring unroll memory. For instance, the memory management model in Spark
    * 1.5 and before places a limit on the amount of space that can be freed from unrolling.
    *
-   * 获取unroll指定N字节大小的内存
+   * 为展开BlockId对应的Block，从堆内存或堆外内存获取所需大小的内存
+   *
+   * UnifiedMemoryManager该方法直接调用acquireStorageMemory
+   * StaticMemoryManager单独实现了
    * @return whether all N bytes were successfully granted.
    */
   def acquireUnrollMemory(blockId: BlockId, numBytes: Long, memoryMode: MemoryMode): Boolean
@@ -180,7 +187,7 @@ private[spark] abstract class MemoryManager(
 
   /**
    * Release N bytes of unroll memory.
-   * 释放unroll指定N字节大小的内存
+   * 释放指定大小的展开内存
    */
   final def releaseUnrollMemory(numBytes: Long, memoryMode: MemoryMode): Unit = synchronized {
     releaseStorageMemory(numBytes, memoryMode)
@@ -196,7 +203,7 @@ private[spark] abstract class MemoryManager(
 
   /**
    * Storage memory currently in use, in bytes.
-   * 当前所使用存储内存的总和
+   * 一共占用的存储内存
    */
   final def storageMemoryUsed: Long = synchronized {
     onHeapStorageMemoryPool.memoryUsed + offHeapStorageMemoryPool.memoryUsed

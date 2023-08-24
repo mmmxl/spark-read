@@ -145,6 +145,7 @@ abstract class LeafNode extends LogicalPlan {
 
 /**
  * A logical plan node with single child.
+ * 一个具有单一子节点的逻辑计划节点
  */
 abstract class UnaryNode extends LogicalPlan {
   def child: LogicalPlan
@@ -186,6 +187,9 @@ abstract class BinaryNode extends LogicalPlan {
   override final def children: Seq[LogicalPlan] = Seq(left, right)
 }
 
+/**
+ * 保留排序的一元运算符
+ */
 abstract class OrderPreservingUnaryNode extends UnaryNode {
   override final def outputOrdering: Seq[SortOrder] = child.outputOrdering
 }

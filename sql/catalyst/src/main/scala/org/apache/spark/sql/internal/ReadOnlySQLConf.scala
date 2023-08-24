@@ -25,6 +25,7 @@ import org.apache.spark.internal.config.{ConfigEntry, ConfigProvider, ConfigRead
 /**
  * A readonly SQLConf that will be created by tasks running at the executor side. It reads the
  * configs from the local properties which are propagated from driver to executors.
+ * 一个给executor端使用的只读的SQLConf
  */
 class ReadOnlySQLConf(context: TaskContext) extends SQLConf {
 

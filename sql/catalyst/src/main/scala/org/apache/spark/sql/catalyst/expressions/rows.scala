@@ -162,6 +162,8 @@ trait BaseGenericInternalRow extends InternalRow {
  * A row implementation that uses an array of objects as the underlying storage.  Note that, while
  * the array is not copied, and thus could technically be mutated after creation, this is not
  * allowed.
+ * 一个使用对象数组作为底层存储的行实现。
+ * 请注意，虽然数组不被复制，因此在技术上可以在创建后进行更改，但这是不允许的。
  */
 class GenericRow(protected[sql] val values: Array[Any]) extends Row {
   /** No-arg constructor for serialization. */

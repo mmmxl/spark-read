@@ -57,6 +57,10 @@ import org.apache.spark.unsafe.Platform;
 import org.apache.spark.util.Utils;
 import org.apache.spark.internal.config.package$;
 
+/**
+ * 底层使用ShuffleExternalSorter作为外部排序器，所以UnsafeShuffleWriter不具备SortShuffleWriter的聚合功能
+ * 使用Tungsten的内存作为缓存，以提高写入磁盘的性能
+ */
 @Private
 public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
 
@@ -66,26 +70,26 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
 
   @VisibleForTesting
   static final int DEFAULT_INITIAL_SORT_BUFFER_SIZE = 4096;
-  static final int DEFAULT_INITIAL_SER_BUFFER_SIZE = 1024 * 1024;
+  static final int DEFAULT_INITIAL_SER_BUFFER_SIZE = 1024 * 1024; // 序列化的缓冲大小 1m
 
   private final BlockManager blockManager;
   private final IndexShuffleBlockResolver shuffleBlockResolver;
   private final TaskMemoryManager memoryManager;
-  private final SerializerInstance serializer;
+  private final SerializerInstance serializer; // 序列化器的实例
   private final Partitioner partitioner;
   private final ShuffleWriteMetrics writeMetrics;
-  private final int shuffleId;
-  private final int mapId;
+  private final int shuffleId; // Shuffle的唯一标识
+  private final int mapId; // map任务的身份标识
   private final TaskContext taskContext;
   private final SparkConf sparkConf;
-  private final boolean transferToEnabled;
-  private final int initialSortBufferSize;
-  private final int inputBufferSizeInBytes;
+  private final boolean transferToEnabled; // // 是否采用NIO的从文件流到文件流的复制方式 spark.file.transferTo=true
+  private final int initialSortBufferSize; // 初始化的排序缓冲大小 spark.shuffle.sort.initialBuffer.Size=4096
+  private final int inputBufferSizeInBytes; //
   private final int outputBufferSizeInBytes;
 
   @Nullable private MapStatus mapStatus;
   @Nullable private ShuffleExternalSorter sorter;
-  private long peakMemoryUsedBytes = 0;
+  private long peakMemoryUsedBytes = 0; // 使用内存的峰值（单位为字节）
 
   /** Subclass of ByteArrayOutputStream that exposes `buf` directly. */
   private static final class MyByteArrayOutputStream extends ByteArrayOutputStream {
@@ -93,8 +97,8 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     public byte[] getBuf() { return buf; }
   }
 
-  private MyByteArrayOutputStream serBuffer;
-  private SerializationStream serOutputStream;
+  private MyByteArrayOutputStream serBuffer; // 提供了暴露ByteArrayOutputStream内存储存数据的字节数组buf的getBuf方法
+  private SerializationStream serOutputStream; // 用于序列化对象的输出流，实际是将serBuffer包装为SerializationStream后的对象
 
   /**
    * Are we in the process of stopping? Because map tasks can call stop() with success = true
@@ -184,9 +188,11 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     // generic throwables.
     boolean success = false;
     try {
+      // 迭代输入的每条记录，并调用insertRecordIntoSorter将记录插入排序器
       while (records.hasNext()) {
         insertRecordIntoSorter(records.next());
       }
+      // 将map任务输出的数据持久化到磁盘
       closeAndWriteOutput();
       success = true;
     } finally {
@@ -224,16 +230,20 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   @VisibleForTesting
   void closeAndWriteOutput() throws IOException {
     assert(sorter != null);
+    // 1.更新使用内存的峰值
     updatePeakMemoryUsed();
+    // 2.关闭ShuffleExternalSorter,并获得溢出的文件信息数组
     serBuffer = null;
     serOutputStream = null;
     final SpillInfo[] spills = sorter.closeAndGetSpills();
     sorter = null;
+    // 3.调用IndexShuffleBlockResolver的getDataFile方法，获取正式的输出数据文件
     final long[] partitionLengths;
     final File output = shuffleBlockResolver.getDataFile(shuffleId, mapId);
     final File tmp = Utils.tempFileWith(output);
     try {
       try {
+        // 4.合并所有溢出文件到正式的输出数据文件
         partitionLengths = mergeSpills(spills, tmp);
       } finally {
         for (SpillInfo spill : spills) {
@@ -242,12 +252,14 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
           }
         }
       }
+      // 5.调用IndexShuffleBlockResolver的writeIndexFileAndCommit方法创建所以文件
       shuffleBlockResolver.writeIndexFileAndCommit(shuffleId, mapId, partitionLengths, tmp);
     } finally {
       if (tmp.exists() && !tmp.delete()) {
         logger.error("Error while deleting temp file {}", tmp.getAbsolutePath());
       }
     }
+    // 5.构造并返回MapStatus
     mapStatus = MapStatus$.MODULE$.apply(blockManager.shuffleServerId(), partitionLengths);
   }
 
@@ -255,8 +267,11 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   void insertRecordIntoSorter(Product2<K, V> record) throws IOException {
     assert(sorter != null);
     final K key = record._1();
+    // 1.计算记录的分区id
     final int partitionId = partitioner.getPartition(key);
+    // 2.重置serBuffer
     serBuffer.reset();
+    // 3.将记录写入serOutputStream中
     serOutputStream.writeKey(key, OBJECT_CLASS_TAG);
     serOutputStream.writeValue(record._2(), OBJECT_CLASS_TAG);
     serOutputStream.flush();
@@ -264,6 +279,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     final int serializedRecordSize = serBuffer.size();
     assert (serializedRecordSize > 0);
 
+    // 4.将记录写入ShuffleExternalSorter的insertRecord方法，将serBuffer底层的字节数组插入到Tungsten的内存中
     sorter.insertRecord(
       serBuffer.getBuf(), Platform.BYTE_ARRAY_OFFSET, serializedRecordSize, partitionId);
   }

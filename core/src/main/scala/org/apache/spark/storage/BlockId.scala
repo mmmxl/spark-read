@@ -29,10 +29,19 @@ import org.apache.spark.annotation.DeveloperApi
  * set of keys which produce its unique name.
  *
  * If your BlockId should be serializable, be sure to add it to the BlockId.apply() method.
+ * 识别一个特定的数据块，通常与一个文件相关。
+ * 一个数据块可以通过它的文件名来唯一识别，但每种类型的数据块都有一组不同的键来产生其独特的名称。
+ * 如果你的BlockId应该是可序列化的，一定要把它添加到BlockId.apply()方法中。
+ * Spark的存储系统中数据的读写是以块为单位的
+ *
+ * sealed: 在该文件以外不能被使用，防止滥用继承
  */
 @DeveloperApi
 sealed abstract class BlockId {
-  /** A globally unique identifier for this Block. Can be used for ser/de. */
+  /**
+   * A globally unique identifier for this Block. Can be used for ser/de.
+   * Block全局唯一的标识名
+   */
   def name: String
 
   // convenience methods
@@ -113,6 +122,7 @@ object BlockId {
   val TEMP_SHUFFLE = "temp_shuffle_([-A-Fa-f0-9]+)".r
   val TEST = "test_(.*)".r
 
+  /** 这里用到了提取器 */
   def apply(name: String): BlockId = name match {
     case RDD(rddId, splitIndex) =>
       RDDBlockId(rddId.toInt, splitIndex.toInt)

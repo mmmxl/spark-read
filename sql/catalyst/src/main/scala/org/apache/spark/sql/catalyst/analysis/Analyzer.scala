@@ -57,13 +57,14 @@ object SimpleAnalyzer extends Analyzer(
  * Provides a way to keep state during the analysis, this enables us to decouple the concerns
  * of analysis environment from the catalog.
  * The state that is kept here is per-query.
- *
+ * 提供了一种在分析过程中保持状态的方法，这使我们能够将分析环境的关注点与目录解耦。
+ * 保存在这里的状态是每个查询。
  * Note this is thread local.
  *
  * @param defaultDatabase The default database used in the view resolution, this overrules the
- *                        current catalog database.
+ *                        current catalog database. 视图的默认数据库名
  * @param nestedViewDepth The nested depth in the view resolution, this enables us to limit the
- *                        depth of nested views.
+ *                        depth of nested views. 嵌套视图深度
  */
 case class AnalysisContext(
     defaultDatabase: Option[String] = None,
@@ -75,6 +76,7 @@ object AnalysisContext {
   }
 
   def get: AnalysisContext = value.get()
+  // ThreadLocal线程不被摧毁，值不会被回收，这里手动回收
   def reset(): Unit = value.remove()
 
   private def set(context: AnalysisContext): Unit = value.set(context)
@@ -91,17 +93,22 @@ object AnalysisContext {
 /**
  * Provides a logical query plan analyzer, which translates [[UnresolvedAttribute]]s and
  * [[UnresolvedRelation]]s into fully typed objects using information in a [[SessionCatalog]].
+ *
+ * 提供一个逻辑查询计划分析器，它使用SessionCatalog中的信息将未解决的属性和未解决的关系翻译成完全类型化的对象。
  */
 class Analyzer(
     catalog: SessionCatalog,
     conf: SQLConf,
-    maxIterations: Int)
+    maxIterations: Int /* 分析器最大迭代次数 */)
   extends RuleExecutor[LogicalPlan] with CheckAnalysis {
 
   def this(catalog: SessionCatalog, conf: SQLConf) = {
     this(catalog, conf, conf.optimizerMaxIterations)
   }
 
+  /**
+   * markInAnalyzer标记正在调用分析器中，防止分析器递归调用自己
+   */
   def executeAndCheck(plan: LogicalPlan): LogicalPlan = AnalysisHelper.markInAnalyzer {
     val analyzed = execute(plan)
     try {
@@ -116,10 +123,12 @@ class Analyzer(
   }
 
   override def execute(plan: LogicalPlan): LogicalPlan = {
+    // 手动收回AnalysisContext对象
     AnalysisContext.reset()
     try {
       executeSameContext(plan)
     } finally {
+      // 手动收回AnalysisContext对象
       AnalysisContext.reset()
     }
   }
@@ -128,10 +137,13 @@ class Analyzer(
 
   def resolver: Resolver = conf.resolver
 
+  // 固定的最大迭代次数
   protected val fixedPoint = FixedPoint(maxIterations)
 
   /**
    * Override to provide additional rules for the "Resolution" batch.
+   * 覆盖为 "Resolution" 批次提供额外的规则
+   * 这里是为了区别hive和spark自身的,两者分别实现的不同规则
    */
   val extendedResolutionRules: Seq[Rule[LogicalPlan]] = Nil
 
@@ -139,21 +151,35 @@ class Analyzer(
    * Override to provide rules to do post-hoc resolution. Note that these rules will be executed
    * in an individual batch. This batch is to run right after the normal resolution batch and
    * execute its rules in one pass.
+   * 覆盖提供规则来做事后分析。请注意，这些规则将在一个单独的批次中执行
+   * 该批次将在正常的决议批次之后立即运行，并且一次性执行其全部规则
+   * 这里是为了区别hive和spark自身的,两者分别实现的不同规则
    */
   val postHocResolutionRules: Seq[Rule[LogicalPlan]] = Nil
 
+  // 重写了RuleExecutor的方法，scala的特殊用法(父类无参方法不带(),子类可以用属性重写)
+  // Analyzer需要执行的batches
   lazy val batches: Seq[Batch] = Seq(
+    // Hints 例如 /*+ BROADCAST(...) */
     Batch("Hints", fixedPoint,
+      // 广播join
       new ResolveHints.ResolveBroadcastHints(conf),
+      // 增加一个coalesce或者repartition
       ResolveHints.ResolveCoalesceHints,
+      // 删除所有hints
       ResolveHints.RemoveAllHints),
+    // 简单的理智检查, 只检查一次
     Batch("Simple Sanity Check", Once,
+      // 查找表示式中使用的方法是否已经注册或者spark/hive自带的
       LookupFunctions),
+    // 替换
     Batch("Substitution", fixedPoint,
       CTESubstitution,
       WindowsSubstitution,
       EliminateUnions,
       new SubstituteUnresolvedOrdinals(conf)),
+    // 分析, 因为antlr4生产的是unrsolveTree,所有我们需要resolve
+    // 基本的语法检查和catalog
     Batch("Resolution", fixedPoint,
       ResolveTableValuedFunctions ::
       ResolveRelations ::
@@ -187,22 +213,35 @@ class Analyzer(
       ResolveTimeZone(conf) ::
       ResolveRandomSeed ::
       TypeCoercion.typeCoercionRules(conf) ++
+      // 这里分成hive和spark2类
       extendedResolutionRules : _*),
+    // 事后分析 可以执行的钩子策略组
+    // // 这里分成hive和spark2类
     Batch("Post-Hoc Resolution", Once, postHocResolutionRules: _*),
+    // 非确定性的
     Batch("Nondeterministic", Once,
       PullOutNondeterministic),
+    // udf的null检查
     Batch("UDF", Once,
       HandleNullInputsForUDF),
     Batch("FixNullability", Once,
       FixNullability),
+    // 子查询
     Batch("Subquery", Once,
       UpdateOuterReferences),
+    // 清理策略组
     Batch("Cleanup", fixedPoint,
       CleanupAliases)
   )
 
   /**
-   * Analyze cte definitions and substitute child plan with analyzed cte definitions.
+   * Analyze cte definitions and substitute child plan with analyzed cte definitions
+   *
+   * 分析CTE定义，用分析后的CTE定义替代子结点
+   * CTE(Common Table Expression): 通用表表达式定义了一个临时的结果集，用户可以在SQL语句的范围内多次引用。CTE主要用于SELECT语句中
+   * @see <a href="https://spark.apache.org/docs/latest/sql-ref-syntax-qry-select-cte.html">link</a>
+   * Syntax: WITH common_table_expression [ , ... ]
+   *         common_table_expression: expression_name [ ( column_name [ , ... ] ) ] [ AS ] ( query )
    */
   object CTESubstitution extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
@@ -231,6 +270,7 @@ class Analyzer(
 
   /**
    * Substitute child plan with WindowSpecDefinitions.
+   *  用WindowSpecDefinitions代替子节点
    */
   object WindowsSubstitution extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
@@ -648,6 +688,7 @@ class Analyzer(
 
   /**
    * Replaces [[UnresolvedRelation]]s with concrete relations from the catalog.
+   * 用catalog中的具体关系替换 [[UnresolvedRelation]]s。
    */
   object ResolveRelations extends Rule[LogicalPlan] {
 
@@ -1273,17 +1314,29 @@ class Analyzer(
    * expensive partition/schema discovery process in some cases.
    * In order to avoid duplicate external functions lookup, the external function identifier will
    * store in the local hash set externalFunctionNameSet.
+   *
+   * 检查[[UnresolvedFunction]]引用的函数标识符是否在函数注册表中定义
+   * 请注意，这条规则并不试图解决[[UnresolvedFunction]]
+   * 它只是根据函数标识符执行简单的存在性检查，以快速识别未定义的函数，而不触发关系解析，
+   * 这在某些情况下可能会产生潜在的昂贵的分区/模式发现过程。
+   * 为了避免重复的外部函数查找，外部函数标识符将会存储在本地哈希集外部功能名称集。
+   *
    * @see [[ResolveFunctions]]
    * @see https://issues.apache.org/jira/browse/SPARK-19737
    */
   object LookupFunctions extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = {
+      // 因为自带的方法很多，所以这里缓存以提升性能
       val externalFunctionNameSet = new mutable.HashSet[FunctionIdentifier]()
+      // 分析expressions
       plan.resolveExpressions {
+        // 现在缓存中查找
         case f: UnresolvedFunction
           if externalFunctionNameSet.contains(normalizeFuncName(f.name)) => f
+        // 注册的udf会优先自带的udf
         case f: UnresolvedFunction if catalog.isRegisteredFunction(f.name) => f
         case f: UnresolvedFunction if catalog.isPersistentFunction(f.name) =>
+          // 添加进externalFunctionNameSet
           externalFunctionNameSet.add(normalizeFuncName(f.name))
           f
         case f: UnresolvedFunction =>
@@ -1298,14 +1351,14 @@ class Analyzer(
       val funcName = if (conf.caseSensitiveAnalysis) {
         name.funcName
       } else {
+        // 默认false 函数名小写
         name.funcName.toLowerCase(Locale.ROOT)
       }
-
+      // 带库名，格式化库名，不带返回当前库名
       val databaseName = name.database match {
         case Some(a) => formatDatabaseName(a)
         case None => catalog.getCurrentDatabase
       }
-
       FunctionIdentifier(funcName, Some(databaseName))
     }
 
@@ -1810,6 +1863,12 @@ class Analyzer(
    * nullable field can be actually set as non-nullable, which cause illegal optimization
    * (e.g., NULL propagation) and wrong answers.
    * See SPARK-13484 and SPARK-13801 for the concrete queries of this case.
+   *
+   * 通过使用子代输出属性的对应属性的空性来修复解析LogicalPlan中属性的空性。
+   * 之所以需要这一步，是因为用户可以在Dataset API中使用解析的AttributeReference，
+   * 而外联接可以改变AttribtueReference的可空性。
+   * 如果不进行修复，一个可空列的nullable字段实际上可以设置为non-nullable，
+   * 这将导致非法优化（例如，NULL传播）和错误的答案。这种情况的具体查询请参见SPARK-13484和SPARK-13801。
    */
   object FixNullability extends Rule[LogicalPlan] {
 
@@ -2095,6 +2154,8 @@ class Analyzer(
   /**
    * Pulls out nondeterministic expressions from LogicalPlan which is not Project or Filter,
    * put them into an inner Project and finally project them away at the outer Project.
+   * 从LogicalPlan中取出非Project或Filter的非确定性表达式，
+   * 将其放入内部Project中，最后在外部Project中投射出去。
    */
   object PullOutNondeterministic extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
@@ -2155,6 +2216,10 @@ class Analyzer(
    * null check.  When user defines a UDF with primitive parameters, there is no way to tell if the
    * primitive parameter is null or not, so here we assume the primitive input is null-propagatable
    * and we should return null if the input is null.
+   *
+   * 通过添加额外的[[If]]表达式来进行空检查，正确处理UDF的空基元输入。
+   * 当用户定义一个带有基元参数的UDF时，无法判断基元参数是否为null，
+   * 所以这里我们假设基元输入是可复制的，如果输入为null，我们应该返回null。
    */
   object HandleNullInputsForUDF extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
@@ -2247,6 +2312,12 @@ class Analyzer(
    * - Insert safe casts when data types do not match
    * - Insert aliases when column names do not match
    * - Detect plans that are not compatible with the output table and throw AnalysisException
+   *
+   * 从逻辑计划中的数据解析输出表的列。这个规则将:
+   * - 当按名称写入时，重新排序列
+   * - 当数据类型不匹配时插入安全转换
+   * - 当列名不匹配时插入别名
+   * - 检测与输出表不兼容的计划并抛出AnalysisException。
    */
   object ResolveOutputRelation extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
@@ -2530,6 +2601,7 @@ class Analyzer(
 /**
  * Removes [[SubqueryAlias]] operators from the plan. Subqueries are only required to provide
  * scoping information for attributes and can be removed once analysis is complete.
+ * 删除SubqueryAlias，子查询只需要为属性提供范围信息，并且可以在分析完成后删除。
  */
 object EliminateSubqueryAliases extends Rule[LogicalPlan] {
   // This is also called in the beginning of the optimization phase, and as a result
@@ -2556,6 +2628,10 @@ object EliminateUnions extends Rule[LogicalPlan] {
  * Window(window expressions). Notice that if an expression has other expression parameters which
  * are not in its `children`, e.g. `RuntimeReplaceable`, the transformation for Aliases in this
  * rule can't work for those parameters.
+ * 清理计划里面不必要的Alias。
+ * 基本上我们只需要Alias作为Project(项目列表)或Aggregate(聚合表达式)或Window(窗口表达式)中的顶层表达式。
+ * 注意，如果一个表达式有其他表达式参数，而这些表达式参数不在其 "子代 "中，
+ * 例如 "RuntimeReplaceable"，那么在这个中对Alias的转换规则不能用于这些参数。
  */
 object CleanupAliases extends Rule[LogicalPlan] {
   private def trimAliases(e: Expression): Expression = {
@@ -2760,6 +2836,8 @@ object ResolveCreateNamedStruct extends Rule[LogicalPlan] {
  * down to the outer query block for evaluation. This rule below updates such outer references
  * as AttributeReference referring attributes from the parent/outer query block.
  *
+ * 从子查询引用外部查询块的集合表达式被推送到外部查询块中进行评估。
+ * 下面这条规则更新了这样的外部引用，如AttributeReference引用父查询块/外查询块的属性。
  * For example (SQL):
  * {{{
  *   SELECT l.a FROM l GROUP BY 1 HAVING EXISTS (SELECT 1 FROM r WHERE r.d < min(l.b))

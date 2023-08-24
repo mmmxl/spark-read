@@ -33,6 +33,8 @@ import org.apache.spark.util.CallSite
  * other earlier stages (for RDDs in the DAG it depends on), and multiple jobs may share some of
  * these previous stages. These dependencies are managed inside DAGScheduler.
  *
+ * 已经激活的Job
+ *
  * @param jobId A unique ID for this job.
  * @param finalStage The stage that this job computes (either a ResultStage for an action or a
  *   ShuffleMapStage for submitMapStage).

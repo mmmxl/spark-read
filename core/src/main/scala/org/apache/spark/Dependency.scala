@@ -73,9 +73,9 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
     @transient private val _rdd: RDD[_ <: Product2[K, V]],
     val partitioner: Partitioner,
     val serializer: Serializer = SparkEnv.get.serializer,
-    val keyOrdering: Option[Ordering[K]] = None,
-    val aggregator: Option[Aggregator[K, V, C]] = None,
-    val mapSideCombine: Boolean = false)
+    val keyOrdering: Option[Ordering[K]] = None, // 按照K进行排序的scala.math.Ordering的实现类
+    val aggregator: Option[Aggregator[K, V, C]] = None, // 对Map任务的输出数据进行聚合的聚合器
+    val mapSideCombine: Boolean = false /* 是否在map端进行合并 */)
   extends Dependency[Product2[K, V]] {
 
   if (mapSideCombine) {
@@ -95,6 +95,7 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
   val shuffleHandle: ShuffleHandle = _rdd.context.env.shuffleManager.registerShuffle(
     shuffleId, _rdd.partitions.length, this)
 
+  // 注册到SparkContext的ContextCleaner中
   _rdd.sparkContext.cleaner.foreach(_.registerShuffleForCleanup(this))
 }
 
@@ -102,6 +103,7 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
 /**
  * :: DeveloperApi ::
  * Represents a one-to-one dependency between partitions of the parent and child RDDs.
+ * 子RDD与父RDD一对一
  */
 @DeveloperApi
 class OneToOneDependency[T](rdd: RDD[T]) extends NarrowDependency[T](rdd) {
@@ -112,6 +114,7 @@ class OneToOneDependency[T](rdd: RDD[T]) extends NarrowDependency[T](rdd) {
 /**
  * :: DeveloperApi ::
  * Represents a one-to-one dependency between ranges of partitions in the parent and child RDDs.
+ * 子RDD依赖多个父RDD，但是分区是一对一
  * @param rdd the parent RDD
  * @param inStart the start of the range in the parent RDD
  * @param outStart the start of the range in the child RDD

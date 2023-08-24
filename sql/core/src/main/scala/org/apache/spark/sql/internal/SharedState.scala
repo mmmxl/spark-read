@@ -39,11 +39,15 @@ import org.apache.spark.util.{MutableURLClassLoader, Utils}
 
 /**
  * A class that holds all state shared across sessions in a given [[SQLContext]].
+ * 在SqlContext中进行跨会话状态
  */
 private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
 
   // Load hive-site.xml into hadoopConf and determine the warehouse path we want to use, based on
   // the config from both hive and Spark SQL. Finally set the warehouse config value to sparkConf.
+  // 会有2个warehouse.dir，hive.metastore.warehouse.dir和spark.sql.warehouse.dir
+  // spark warehouse dir优先于hive warehouse dir
+  // hive warehouse dir只在hadoopConfig中设置
   val warehousePath: String = {
     val configFile = Utils.getContextOrSparkClassLoader.getResource("hive-site.xml")
     if (configFile != null) {
@@ -80,24 +84,28 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
 
   /**
    * Class for caching query results reused in future executions.
+   * 用于缓存在未来执行中重用的查询结果的类
    */
   val cacheManager: CacheManager = new CacheManager
 
   /**
    * A status store to query SQL status/metrics of this Spark application, based on SQL-specific
    * [[org.apache.spark.scheduler.SparkListenerEvent]]s.
+   * 查询此Spark应用程序的SQL状态度量的状态存储
    */
   val statusStore: SQLAppStatusStore = {
     val kvStore = sparkContext.statusStore.store.asInstanceOf[ElementTrackingStore]
     val listener = new SQLAppStatusListener(sparkContext.conf, kvStore, live = true)
     sparkContext.listenerBus.addToStatusQueue(listener)
     val statusStore = new SQLAppStatusStore(kvStore, Some(listener))
+    // spark web ui页面上的sql页是在这里添加的
     sparkContext.ui.foreach(new SQLTab(statusStore, _))
     statusStore
   }
 
   /**
    * A catalog that interacts with external systems.
+   * 关联外部系统的catalog
    */
   lazy val externalCatalog: ExternalCatalogWithListener = {
     val externalCatalog = SharedState.reflect[ExternalCatalog, SparkConf, Configuration](
@@ -118,9 +126,10 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
     }
 
     // Wrap to provide catalog events
+    // 提供catalog事件的包装类
     val wrapped = new ExternalCatalogWithListener(externalCatalog)
 
-    // Make sure we propagate external catalog events to the spark listener bus
+    // Make sure we propagate(传播) external catalog events to the spark listener bus
     wrapped.addListener(new ExternalCatalogEventListener {
       override def onEvent(event: ExternalCatalogEvent): Unit = {
         sparkContext.listenerBus.post(event)
@@ -132,6 +141,7 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
 
   /**
    * A manager for global temporary views.
+   * 全局临时视图的管理器
    */
   lazy val globalTempViewManager: GlobalTempViewManager = {
     // System preserved database should not exists in metastore. However it's hard to guarantee it
@@ -149,12 +159,19 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
 
   /**
    * A classloader used to load all user-added jar.
+   * 加载所有用户添加的类加载器
    */
   val jarClassLoader = new NonClosableMutableURLClassLoader(
     org.apache.spark.util.Utils.getContextOrSparkClassLoader)
 
 }
 
+/**
+ * 设置Url流
+ * 2个私有方法：
+ *  1.获取Catalog的方法
+ *  2.根据2个参数进行反射构建的快捷方法
+ */
 object SharedState extends Logging {
   try {
     URL.setURLStreamHandlerFactory(new FsUrlStreamHandlerFactory())

@@ -78,7 +78,9 @@ case class TableIdentifier(table: String, database: Option[String])
   def this(table: String) = this(table, None)
 }
 
-/** A fully qualified identifier for a table (i.e., database.tableName) */
+/** A fully qualified identifier for a table (i.e., database.tableName)
+ * 一个表的完全限定标识符
+ */
 case class QualifiedTableName(database: String, name: String) {
   override def toString: String = s"$database.$name"
 }
@@ -91,6 +93,7 @@ object TableIdentifier {
 /**
  * Identifies a function in a database.
  * If `database` is not defined, the current database is used.
+ * 在数据库中定义一个function
  */
 case class FunctionIdentifier(funcName: String, database: Option[String])
   extends IdentifierWithDatabase {

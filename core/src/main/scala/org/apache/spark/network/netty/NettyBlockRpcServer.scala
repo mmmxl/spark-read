@@ -56,6 +56,7 @@ class NettyBlockRpcServer(
 
     message match {
       case openBlocks: OpenBlocks =>
+        // 打开（读取）Block
         val blocksNum = openBlocks.blockIds.length
         val blocks = for (i <- (0 until blocksNum).view)
           yield blockManager.getBlockData(BlockId.apply(openBlocks.blockIds(i)))
@@ -65,6 +66,7 @@ class NettyBlockRpcServer(
         responseContext.onSuccess(new StreamHandle(streamId, blocksNum).toByteBuffer)
 
       case uploadBlock: UploadBlock =>
+        // 上传Block
         // StorageLevel and ClassTag are serialized as bytes using our JavaSerializer.
         val (level: StorageLevel, classTag: ClassTag[_]) = {
           serializer

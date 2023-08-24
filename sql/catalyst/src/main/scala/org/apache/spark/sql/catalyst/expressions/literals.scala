@@ -203,6 +203,7 @@ object NonNullLiteral {
 
 /**
  * Extractor for retrieving Int literals.
+ * 用于检索Int的提取器
  */
 object IntegerLiteral {
   def unapply(a: Any): Option[Int] = a match {

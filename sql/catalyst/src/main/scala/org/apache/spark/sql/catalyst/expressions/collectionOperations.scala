@@ -133,7 +133,7 @@ case class Size(child: Expression) extends UnaryExpression with ExpectsInputType
       > SELECT _FUNC_(map(1, 'a', 2, 'b'));
        [1,2]
   """)
-case class MapKeys(child: Expression)
+  case class MapKeys(child: Expression)
   extends UnaryExpression with ExpectsInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(MapType)
@@ -906,7 +906,7 @@ object ArraySortLike {
        [null,"a","b","c","d"]
   """)
 // scalastyle:on line.size.limit
-case class SortArray(base: Expression, ascendingOrder: Expression)
+  case class SortArray(base: Expression, ascendingOrder: Expression)
   extends BinaryExpression with ArraySortLike {
 
   def this(e: Expression) = this(e, Literal(true))

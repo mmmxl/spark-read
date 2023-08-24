@@ -25,14 +25,17 @@ import org.apache.spark.util.Utils
 private[spark] object BlockManagerMessages {
   //////////////////////////////////////////////////////////////////////////////////
   // Messages from the master to slaves.
+  // 发送给BlockManagerSlave的消息
   //////////////////////////////////////////////////////////////////////////////////
   sealed trait ToBlockManagerSlave
 
   // Remove a block from the slaves that have it. This can only be used to remove
   // blocks that the master knows about.
+  // 移除Block
   case class RemoveBlock(blockId: BlockId) extends ToBlockManagerSlave
 
   // Replicate blocks that were lost due to executor failure
+  //
   case class ReplicateBlock(blockId: BlockId, replicas: Seq[BlockManagerId], maxReplicas: Int)
     extends ToBlockManagerSlave
 
@@ -53,9 +56,11 @@ private[spark] object BlockManagerMessages {
 
   //////////////////////////////////////////////////////////////////////////////////
   // Messages from slaves to the master.
+  // 发送给BlockManagerMaster的消息
   //////////////////////////////////////////////////////////////////////////////////
   sealed trait ToBlockManagerMaster
 
+  // 注册BlockManager
   case class RegisterBlockManager(
       blockManagerId: BlockManagerId,
       maxOnHeapMemSize: Long,
@@ -63,6 +68,7 @@ private[spark] object BlockManagerMessages {
       sender: RpcEndpointRef)
     extends ToBlockManagerMaster
 
+  // 更新Block信息
   case class UpdateBlockInfo(
       var blockManagerId: BlockManagerId,
       var blockId: BlockId,
@@ -91,36 +97,41 @@ private[spark] object BlockManagerMessages {
     }
   }
 
+  // 获取Block的位置
   case class GetLocations(blockId: BlockId) extends ToBlockManagerMaster
 
+  // 获取Block的位置和Status
   case class GetLocationsAndStatus(blockId: BlockId) extends ToBlockManagerMaster
 
   // The response message of `GetLocationsAndStatus` request.
+  // GetLocationsAndStatus的响应信息
   case class BlockLocationsAndStatus(locations: Seq[BlockManagerId], status: BlockStatus) {
     assert(locations.nonEmpty)
   }
 
+  // 获取多个Block的位置
   case class GetLocationsMultipleBlockIds(blockIds: Array[BlockId]) extends ToBlockManagerMaster
 
+  // 获取其他BlockManager的BlockManagerId
   case class GetPeers(blockManagerId: BlockManagerId) extends ToBlockManagerMaster
-
+  // 获取Executor的EndpointRef引用
   case class GetExecutorEndpointRef(executorId: String) extends ToBlockManagerMaster
-
+  // 移除Block
   case class RemoveExecutor(execId: String) extends ToBlockManagerMaster
 
   case object StopBlockManagerMaster extends ToBlockManagerMaster
-
+  // 获取指定的BlockManager的内存状态
   case object GetMemoryStatus extends ToBlockManagerMaster
-
+  //
   case object GetStorageStatus extends ToBlockManagerMaster
-
+  // 获取Block的状态
   case class GetBlockStatus(blockId: BlockId, askSlaves: Boolean = true)
     extends ToBlockManagerMaster
-
+  // 获取匹配过滤条件的Block
   case class GetMatchingBlockIds(filter: BlockId => Boolean, askSlaves: Boolean = true)
     extends ToBlockManagerMaster
-
+  // BlockManager的心跳信息
   case class BlockManagerHeartbeat(blockManagerId: BlockManagerId) extends ToBlockManagerMaster
-
+  // 指定的Executor上是否有缓存的Block
   case class HasCachedBlocks(executorId: String) extends ToBlockManagerMaster
 }

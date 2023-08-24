@@ -80,6 +80,7 @@ trait CheckAnalysis extends PredicateHelper {
     }
   }
 
+  /** 检查树，下面是大量的模式匹配和对应的报错 */
   def checkAnalysis(plan: LogicalPlan): Unit = {
     // We transform up and order the rules so as to catch the first possible failure instead
     // of the result of cascading resolution failures.

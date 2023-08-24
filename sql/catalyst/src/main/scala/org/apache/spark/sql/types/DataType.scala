@@ -18,20 +18,19 @@
 package org.apache.spark.sql.types
 
 import java.util.Locale
-
 import scala.util.control.NonFatal
-
 import org.json4s._
 import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
-
 import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
+
+import scala.util.matching.Regex
 
 /**
  * The base type of all Spark SQL data types.
@@ -339,7 +338,7 @@ object DataType {
     }
   }
 
-  private val SparkGeneratedName = """col\d+""".r
+  private val SparkGeneratedName: Regex = """col\d+""".r
   private def isSparkGeneratedName(name: String): Boolean = name match {
     case SparkGeneratedName(_*) => true
     case _ => false
@@ -362,6 +361,14 @@ object DataType {
    * Extra fields in write-side structs are not allowed to avoid accidentally writing data that
    * the read schema will not read, and to ensure map key equality is not changed when data is read.
    *
+   * 如果写数据类型可以用读数据类型读取，则返回true。
+   * 写入类型与读取类型兼容，如果：
+   * - 两种类型都是数组，数组元素类型兼容，元素空值化。
+   * - 两种类型都是数组，数组元素类型兼容，元素空性兼容(读允许无值或写不包含无值)。
+   * - 两种类型都是映射，映射的键和值类型是兼容的，值的空性是兼容的（读允许空值或写不包含空值）。
+   * - 两种类型都是结构，读结构中的每个字段都存在于写结构中，并且兼容（包括可空性），如果写结构不包含该字段，则可空。如果写结构中包含的字段在读结构中不存在，则写侧结构不兼容。
+   * - 两种类型都是原子型的，写型可以安全地转为读型。
+   * 写入侧结构中不允许有额外的字段，以避免意外地写出以下数据 读取模式不会被读取，并确保读取数据时映射键的平等性不会被改变。
    * @param write a write-side data type to validate against the read type
    * @param read a read-side data type
    * @return true if data written with the write type can be read using the read type

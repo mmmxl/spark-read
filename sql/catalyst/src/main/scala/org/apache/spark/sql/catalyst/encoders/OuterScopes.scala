@@ -37,6 +37,10 @@ object OuterScopes {
    *
    * Warning: this function operates on the assumption that there is only ever one instance of any
    * given wrapper class.
+   * 为该上下文添加一个新的外部作用域，该作用域可在反序列化期间实例化 "内部类 "时使用。中定义了一个case类，
+   * 当在Spark REPL中定义了一个case类时，就会创建内类，而注册这个类所定义的外域，我们就可以在spark执行器上创建新的实例。
+   * 在正常使用中，用户应该不需要调用这个
+   * 警告：这个函数的操作是基于任何给定的包装器类永远只有一个实例的假设。
    */
   def addOuterScope(outer: AnyRef): Unit = {
     outerScopes.putIfAbsent(outer.getClass.getName, outer)

@@ -67,6 +67,10 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
    * Users should not expect a specific directionality. If a specific directionality is needed,
    * [[resolveOperatorsUp]] or [[resolveOperatorsDown]] should be used.
    *
+   * 返回这个节点的副本，其中`rule`已被递归地应用到树上
+   * 当`rule`不应用于某个节点时，它将保持不变。这个函数类似于 "transform"，但是跳过已经被标记为分析的子树
+   * 用户不应期望有特定的方向性。如果需要特定的方向性，应该使用[[resolveOperatorsUp]]或[[resolveOperatorsDown]]
+   *
    * @param rule the function use to transform this nodes children
    */
   def resolveOperators(rule: PartialFunction[LogicalPlan, LogicalPlan]): LogicalPlan = {
@@ -79,6 +83,12 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
    * it is left unchanged.  This function is similar to `transformUp`, but skips sub-trees that
    * have already been marked as analyzed.
    *
+   * 返回这个节点的副本，其中 "rule" 已被递归地首先应用于它的所有子节点，然后再应用于它自己（后序，自下而上）。
+   * 当`rule`不应用于某个节点时，它将保持不变。 这个函数类似于 "transformUp"，但跳过已经被标记为分析的子树。
+   *
+   * 简单来说就是后序遍历使用传入的rule,如果遍历到的结点已经被使用过,就忽略
+   * 原因是可能会多次迭代
+   *
    * @param rule the function use to transform this nodes children
    */
   def resolveOperatorsUp(rule: PartialFunction[LogicalPlan, LogicalPlan]): LogicalPlan = {
@@ -87,6 +97,7 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
         val afterRuleOnChildren = mapChildren(_.resolveOperatorsUp(rule))
         if (self fastEquals afterRuleOnChildren) {
           CurrentOrigin.withOrigin(origin) {
+            // 该方法简单的把传出的参数原封不动的再返回
             rule.applyOrElse(self, identity[LogicalPlan])
           }
         } else {
@@ -100,7 +111,9 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
     }
   }
 
-  /** Similar to [[resolveOperatorsUp]], but does it top-down. */
+  /** Similar to [[resolveOperatorsUp]], but does it top-down.
+   * 跟resolveOperatorsUp一样,只不是是自顶向下的
+   */
   def resolveOperatorsDown(rule: PartialFunction[LogicalPlan, LogicalPlan]): LogicalPlan = {
     if (!analyzed) {
       AnalysisHelper.allowInvokingTransformsInAnalyzer {
@@ -126,6 +139,7 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
    */
   def resolveExpressions(r: PartialFunction[Expression, Expression]): LogicalPlan = {
     resolveOperators  {
+      // 这里 p => p.type (p执行transformExpressions方法后返回的类型)
       case p => p.transformExpressions(r)
     }
   }
@@ -184,6 +198,8 @@ object AnalysisHelper {
   /**
    * A thread local to track whether we are in the analysis phase of query compilation. This is an
    * int rather than a boolean in case our analyzer recursively calls itself.
+   *
+   * 一个线程本地，用于跟踪我们是否处于查询编译的分析阶段。这是一个int而不是boolean，以防我们的分析器递归调用自己。
    */
   private val inAnalyzer: ThreadLocal[Int] = new ThreadLocal[Int] {
     override def initialValue(): Int = 0

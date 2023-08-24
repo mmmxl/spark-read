@@ -23,6 +23,8 @@ import org.apache.spark.util.Utils
 /**
  * Static SQL configuration is a cross-session, immutable Spark configuration. External users can
  * see the static sql configs via `SparkSession.conf`, but can NOT set/unset them.
+ * 静态sql配置是跨越会话的。
+ * 外部使用者只能查看这些配置
  */
 object StaticSQLConf {
 
@@ -33,6 +35,7 @@ object StaticSQLConf {
     .stringConf
     .createWithDefault(Utils.resolveURI("spark-warehouse").toString)
 
+  // catalog的类型, hive or in-memory
   val CATALOG_IMPLEMENTATION = buildStaticConf("spark.sql.catalogImplementation")
     .internal()
     .stringConf
@@ -58,6 +61,7 @@ object StaticSQLConf {
       .intConf
       .createWithDefault(4000)
 
+  /** 将限定表名映射到表关系计划的缓存的最大大小 */
   val FILESOURCE_TABLE_RELATION_CACHE_SIZE =
     buildStaticConf("spark.sql.filesourceTableRelationCacheSize")
       .internal()

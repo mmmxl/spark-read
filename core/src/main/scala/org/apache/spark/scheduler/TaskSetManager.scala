@@ -42,6 +42,9 @@ import org.apache.spark.util.collection.MedianHeap
  * THREADING: This class is designed to only be called from code with a lock on the
  * TaskScheduler (e.g. its event handlers). It should not be called from other threads.
  *
+ * 对TaskSet进行管理，包括任务推断、Task本地性，并对Task进行资源分配。
+ * TaskSet是整个调度池中对Task进行调度管理的基本单位
+ *
  * @param sched           the TaskSchedulerImpl associated with the TaskSetManager
  * @param taskSet         the TaskSet to manage scheduling for
  * @param maxTaskFailures if any particular task fails this number of times, the entire
@@ -50,7 +53,7 @@ import org.apache.spark.util.collection.MedianHeap
 private[spark] class TaskSetManager(
     sched: TaskSchedulerImpl,
     val taskSet: TaskSet,
-    val maxTaskFailures: Int,
+    val maxTaskFailures: Int, // 最大任务失败数
     blacklistTracker: Option[BlacklistTracker] = None,
     clock: Clock = new SystemClock()) extends Schedulable with Logging {
 
@@ -61,9 +64,12 @@ private[spark] class TaskSetManager(
   private val addedFiles = HashMap[String, Long](sched.sc.addedFiles.toSeq: _*)
 
   // Quantile of tasks at which to start speculation
+  // 开始推断执行的任务分数
   val SPECULATION_QUANTILE = conf.getDouble("spark.speculation.quantile", 0.75)
+  // 推断的乘数，将用于可推断任务执行Task的检查
   val SPECULATION_MULTIPLIER = conf.getDouble("spark.speculation.multiplier", 1.5)
 
+  // 结果总大小的字节限制 默认1GB
   val maxResultSize = conf.get(config.MAX_RESULT_SIZE)
 
   val speculationEnabled = conf.getBoolean("spark.speculation", false)
@@ -82,6 +88,7 @@ private[spark] class TaskSetManager(
   // marked as "succeeded" if it failed with a fetch failure, in which case it should not
   // be re-run because the missing map data needs to be regenerated first.
   val successful = new Array[Boolean](numTasks)
+  // 每个Task的执行失败次数进行记录的数组
   private val numFailures = new Array[Int](numTasks)
 
   // Add the tid of task into this HashSet when the task is killed by other attempt tasks.
@@ -98,9 +105,12 @@ private[spark] class TaskSetManager(
   var stageId = taskSet.stageId
   val name = "TaskSet_" + taskSet.id
   var parent: Pool = null
+  // 所有Task执行结果的总大小
   private var totalResultSize = 0L
+  // 计算过的Task数量
   private var calculatedTasks = 0
 
+  // TaskSetManager所管理的TaskSet的Executor或节点的黑名单
   private[scheduler] val taskSetBlacklistHelperOpt: Option[TaskSetBlacklist] = {
     blacklistTracker.map { _ =>
       new TaskSetBlacklist(sched.sc.listenerBus, conf, stageId, taskSet.stageAttemptId, clock)
@@ -121,6 +131,7 @@ private[spark] class TaskSetManager(
   // state until all tasks have finished running; we keep TaskSetManagers that are in the zombie
   // state in order to continue to track and account for the running tasks.
   // TODO: We should kill any running task attempts when the task set manager becomes a zombie.
+  // 当TaskSetManager所管理的TaskSet中的所有Task都执行成功了，不再有更多的Task尝试被启动时，就处于"僵尸"状态。
   private[scheduler] var isZombie = false
 
   // Whether the taskSet run tasks from a barrier stage. Spark must launch all the tasks at the
@@ -167,6 +178,7 @@ private[spark] class TaskSetManager(
   val successfulTaskDurations = new MedianHeap()
 
   // How frequently to reprint duplicate exceptions in full, in milliseconds
+  // 异常打印到日志的时间间隔
   val EXCEPTION_PRINT_INTERVAL =
     conf.getLong("spark.logging.exceptionPrintInterval", 10000)
 
@@ -176,6 +188,7 @@ private[spark] class TaskSetManager(
   private val recentExceptions = HashMap[String, (Int, Long)]()
 
   // Figure out the current map output tracker epoch and set it on all tasks
+  // 故障转移
   val epoch = sched.mapOutputTracker.getEpoch
   logDebug("Epoch for " + taskSet + ": " + epoch)
   for (t <- tasks) {
@@ -193,22 +206,28 @@ private[spark] class TaskSetManager(
    * the set of currently available executors.  This is updated as executors are added and removed.
    * This allows a performance optimization, of skipping levels that aren't relevant (eg., skip
    * PROCESS_LOCAL if no tasks could be run PROCESS_LOCAL for the current set of executors).
+   *
+   * Task的本地性级别的数组
    */
   private[scheduler] var myLocalityLevels = computeValidLocalityLevels()
 
   // Time to wait at each level
+  /* 本地性级别的等待事件 */
   private[scheduler] var localityWaits = myLocalityLevels.map(getLocalityWait)
 
   // Delay scheduling variables: we keep track of our current locality level and the time we
   // last launched a task at that level, and move up a level when localityWaits[curLevel] expires.
   // We then move down if we manage to launch a "more local" task.
+  /* 当前的本地性级别在myLocalityLevels中的索引 */
   private var currentLocalityIndex = 0 // Index of our current locality level in validLocalityLevels
+  /* 在当前的本地性级别上运行Task的时间 */
   private var lastLaunchTime = clock.getTimeMillis()  // Time we last launched a task at this level
 
   override def schedulableQueue: ConcurrentLinkedQueue[Schedulable] = null
 
   override def schedulingMode: SchedulingMode = SchedulingMode.NONE
 
+  /* 当发生序列化的Task的大小超过了100KB，此属性将被设置为true，并且打印警告级别的日志 */
   private[scheduler] var emittedTaskSizeWarning = false
 
   /** Add a task to all the pending-task lists that it should be on. */
@@ -314,6 +333,7 @@ private[spark] class TaskSetManager(
   protected def dequeueSpeculativeTask(execId: String, host: String, locality: TaskLocality.Value)
     : Option[(Int, TaskLocality.Value)] =
   {
+    // 移除已经完成的Task
     speculatableTasks.retain(index => !successful(index)) // Remove finished tasks from set
 
     def canRunOnHost(index: Int): Boolean = {
@@ -331,6 +351,7 @@ private[spark] class TaskSetManager(
           case _ => None
         });
         if (executors.contains(execId)) {
+          // 找到了在指定的Executor上推断执行的Task
           speculatableTasks -= index
           return Some((index, TaskLocality.PROCESS_LOCAL))
         }
@@ -341,6 +362,7 @@ private[spark] class TaskSetManager(
         for (index <- speculatableTasks if canRunOnHost(index)) {
           val locations = tasks(index).preferredLocations.map(_.host)
           if (locations.contains(host)) {
+            // 找到了在本地节点上推断执行的Task
             speculatableTasks -= index
             return Some((index, TaskLocality.NODE_LOCAL))
           }
@@ -1010,11 +1032,18 @@ private[spark] class TaskSetManager(
    * Check for tasks to be speculated and return true if there are any. This is called periodically
    * by the TaskScheduler.
    *
+   * 1.僵尸模式，有屏障，任务为1，就不推断
+   * 2.如果成功数 > 推断最小结束数量 && 成功数 > 0
+   * 3.threshold = max(成功任务时长的中位数，推断执行的最小时间)
+   * 4.遍历taskInfos，将符合推断条件的Task在TaskSet中的索引放入speculatableTasks中
+   *   推断条件：还未执行成功、复制运行数为一、运行时间大于threshold。
+   *
    */
   override def checkSpeculatableTasks(minTimeToSpeculation: Int): Boolean = {
     // Can't speculate if we only have one task, and no need to speculate if the task set is a
     // zombie or is from a barrier stage.
     if (isZombie || isBarrier || numTasks == 1) {
+      // 没有可以推断的Task
       return false
     }
     var foundTasks = false

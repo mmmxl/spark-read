@@ -39,6 +39,7 @@ class VariableSubstitution(conf: SQLConf) {
 
   /**
    * Given a query, does variable substitution and return the result.
+   * 给定一个查询，进行变量替换并返回结果
    */
   def substitute(input: String): String = {
     if (conf.variableSubstituteEnabled) {

@@ -31,12 +31,17 @@ import static org.apache.spark.launcher.LauncherProtocol.*;
  * Encapsulates a connection between a launcher server and client. This takes care of the
  * communication (sending and receiving messages), while processing of messages is left for
  * the implementations.
+ *
+ * 提供了维护连接和收发消息的基本实现
  */
 abstract class LauncherConnection implements Closeable, Runnable {
 
   private static final Logger LOG = Logger.getLogger(LauncherConnection.class.getName());
 
+  // Socket客户端
   private final Socket socket;
+
+  // 建立在Socket的输出流上的ObjectOutputStream，用于向服务端发送消息
   private final ObjectOutputStream out;
 
   private volatile boolean closed;
@@ -47,8 +52,12 @@ abstract class LauncherConnection implements Closeable, Runnable {
     this.closed = false;
   }
 
+  /** 处理LauncherServer发送的消息的抽象方法 */
   protected abstract void handle(Message msg) throws IOException;
 
+  /**
+   * 从Socket客户端的输入流中读取LauncherServer发送的消息
+   */
   @Override
   public void run() {
     try {

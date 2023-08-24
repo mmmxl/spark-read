@@ -21,12 +21,16 @@ import java.io.Serializable;
 
 /**
  * Exposes information about Spark Jobs.
- *
+ * 暴露了有关Spark Jobs的信息
  * This interface is not designed to be implemented outside of Spark.  We may add additional methods
  * which may break binary compatibility with outside implementations.
+ * 这个接口的设计不是为了在Spark之外实现。 我们可能会添加额外的方法，这可能会破坏与外部实现的二进制兼容性。
  */
 public interface SparkJobInfo extends Serializable {
+  // job id
   int jobId();
+  // stage id组
   int[] stageIds();
+  // job的执行状态
   JobExecutionStatus status();
 }

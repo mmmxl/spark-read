@@ -1601,6 +1601,10 @@ object SQLConf {
  * modify the hints by programmatically calling the setters and getters of this class.
  *
  * SQLConf is thread-safe (internally synchronized, so safe to be used in multiple threads).
+ * 可以设置和获取可变更的配置参数/提示的类。
+ * 在存在SQLContext的情况下，这些参数可以通过向Spark SQL的查询函数（即sql()）传递SET命令进行设置和查询。
+ * 否则，该类的用户可以通过调用该类的setter和getter来修改这些提示。
+ * SQLConf是线程安全的（内部同步，所以可以安全地在多个线程中使用）。
  */
 class SQLConf extends Serializable with Logging {
   import SQLConf._
@@ -1773,6 +1777,7 @@ class SQLConf extends Serializable with Logging {
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two
    * identifiers are equal.
+   * 比较器，比较2个字符串，一个忽略大小写，一个不忽略大小写
    */
   def resolver: Resolver = {
     if (caseSensitiveAnalysis) {

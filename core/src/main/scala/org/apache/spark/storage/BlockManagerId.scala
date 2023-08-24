@@ -33,19 +33,25 @@ import org.apache.spark.util.Utils
  * can be created only using the apply method in the companion object. This allows de-duplication
  * of ID objects. Also, constructor parameters are private to ensure that parameters cannot be
  * modified from outside this class.
+ * 这个类的前两个构造函数是私有的，以确保BlockManagerId对象只能使用同伴对象中的apply方法创建。
+ * 这允许ID对象的去重复化。另外，构造函数参数是私有的，以确保参数不能从这个类之外被修改。
+ *
+ * Externalizable是Serializable的子接口，由我们来指定需要序列化的内容
  */
 @DeveloperApi
 class BlockManagerId private (
+    // 当前BlockManager所在的实例的Id,Driver为driver
+    // Executor由Master负责分配，ID格式为app -日期格式字符串 - 数字
     private var executorId_ : String,
-    private var host_ : String,
-    private var port_ : Int,
-    private var topologyInfo_ : Option[String])
+    private var host_ : String, // 主机域名或IP
+    private var port_ : Int, // BlockManager中的BlockTransferService对外服务的端口
+    private var topologyInfo_ : Option[String] /* 拓扑信息 */)
   extends Externalizable {
 
   private def this() = this(null, null, 0, None)  // For deserialization only
 
   def executorId: String = executorId_
-
+  // 参数检查
   if (null != host_) {
     Utils.checkHost(host_)
     assert (port_ > 0)
@@ -69,6 +75,7 @@ class BlockManagerId private (
       executorId == SparkContext.LEGACY_DRIVER_IDENTIFIER
   }
 
+  /** 序列化  */
   override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
     out.writeUTF(executorId_)
     out.writeUTF(host_)
@@ -78,6 +85,7 @@ class BlockManagerId private (
     topologyInfo.foreach(out.writeUTF(_))
   }
 
+  /** 反序列化  */
   override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
     executorId_ = in.readUTF()
     host_ = in.readUTF()
@@ -127,6 +135,7 @@ private[spark] object BlockManagerId {
       topologyInfo: Option[String] = None): BlockManagerId =
     getCachedBlockManagerId(new BlockManagerId(execId, host, port, topologyInfo))
 
+  /** 根据一个对象输入流反序列化 */
   def apply(in: ObjectInput): BlockManagerId = {
     val obj = new BlockManagerId()
     obj.readExternal(in)
@@ -134,7 +143,7 @@ private[spark] object BlockManagerId {
   }
 
   /**
-   * The max cache size is hardcoded to 10000, since the size of a BlockManagerId
+   * The max cache size is hardcoded(硬编码) to 10000, since the size of a BlockManagerId
    * object is about 48B, the total memory cost should be below 1MB which is feasible.
    */
   val blockManagerIdCache = CacheBuilder.newBuilder()

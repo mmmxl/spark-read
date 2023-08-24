@@ -106,7 +106,7 @@ private[spark] abstract class LauncherBackend {
 
     override protected def handle(m: Message): Unit = m match {
       case _: Stop =>
-        fireStopRequest()
+        fireStopRequest() // 停止Executor
 
       case _ =>
         throw new IllegalArgumentException(s"Unexpected message type: ${m.getClass().getName()}")

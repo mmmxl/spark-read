@@ -24,7 +24,7 @@ import org.apache.spark.sql.types.StructType
 
 /**
  * Utils for handling schemas.
- *
+ * 检查schema内列名是否重复
  * TODO: Merge this file with [[org.apache.spark.ml.util.SchemaUtils]].
  */
 private[spark] object SchemaUtils {
@@ -32,7 +32,7 @@ private[spark] object SchemaUtils {
   /**
    * Checks if an input schema has duplicate column names. This throws an exception if the
    * duplication exists.
-   *
+   * 检查schema里面的列名是否重复
    * @param schema schema to check
    * @param colType column type name, used in an exception message
    * @param caseSensitiveAnalysis whether duplication checks should be case sensitive or not

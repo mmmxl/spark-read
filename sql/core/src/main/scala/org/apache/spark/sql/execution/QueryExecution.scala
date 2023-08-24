@@ -39,6 +39,8 @@ import org.apache.spark.util.Utils
  *
  * While this is not a public class, we should avoid changing the function names for the sake of
  * changing them, because a lot of developers use the feature for debugging.
+ *
+ * 使用Spark执行关系查询的主要工作流
  */
 class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
 
@@ -53,8 +55,11 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
     }
   }
 
+  /* analyzer阶段 */
   lazy val analyzed: LogicalPlan = {
+    // 设置当前线程的SparkSession
     SparkSession.setActiveSession(sparkSession)
+    //
     sparkSession.sessionState.analyzer.executeAndCheck(logical)
   }
 
@@ -64,8 +69,10 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
     sparkSession.sharedState.cacheManager.useCachedData(analyzed)
   }
 
+  /* optimizer阶段 */
   lazy val optimizedPlan: LogicalPlan = sparkSession.sessionState.optimizer.execute(withCachedData)
 
+  /* SparkPlan阶段 */
   lazy val sparkPlan: SparkPlan = {
     SparkSession.setActiveSession(sparkSession)
     // TODO: We use next(), i.e. take the first plan returned by the planner, here for now,
@@ -73,11 +80,16 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
     planner.plan(ReturnAnswer(optimizedPlan)).next()
   }
 
+  /* prepareForExecution阶段 */
   // executedPlan should not be used to initialize any SparkPlan. It should be
   // only used for execution.
   lazy val executedPlan: SparkPlan = prepareForExecution(sparkPlan)
 
-  /** Internal version of the RDD. Avoids copies and has no schema */
+  /* execute阶段 */
+  /**
+   * Internal version of the RDD. Avoids copies and has no schema
+   * RDD的内部版本。避免复制和没有schema
+   */
   lazy val toRdd: RDD[InternalRow] = {
     if (sparkSession.sessionState.conf.getConf(SQLConf.USE_CONF_ON_RDD_OPERATION)) {
       new SQLExecutionRDD(executedPlan.execute(), sparkSession.sessionState.conf)

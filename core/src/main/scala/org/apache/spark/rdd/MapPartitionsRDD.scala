@@ -58,6 +58,7 @@ private[spark] class MapPartitionsRDD[U: ClassTag, T: ClassTag](
   override def compute(split: Partition, context: TaskContext): Iterator[U] =
     f(context, split.index, firstParent[T].iterator(split, context))
 
+  /** 清除依赖 */
   override def clearDependencies() {
     super.clearDependencies()
     prev = null
@@ -66,6 +67,7 @@ private[spark] class MapPartitionsRDD[U: ClassTag, T: ClassTag](
   @transient protected lazy override val isBarrier_ : Boolean =
     isFromBarrier || dependencies.exists(_.rdd.isBarrier())
 
+  /** deterministic: 确定性的 */
   override protected def getOutputDeterministicLevel = {
     if (isOrderSensitive && prev.outputDeterministicLevel == DeterministicLevel.UNORDERED) {
       DeterministicLevel.INDETERMINATE

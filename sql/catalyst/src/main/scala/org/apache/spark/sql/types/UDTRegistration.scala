@@ -28,6 +28,11 @@ import org.apache.spark.util.Utils
  * Previously we use the annotation `SQLUserDefinedType` to register UDTs for user classes.
  * However, by doing this, we add SparkSQL dependency on user classes. This object provides
  * alternative approach to register UDTs for user classes.
+ *
+ * 这个对象保留了用户类和它们的用户定义类型（UDTs）之间的映射.
+ * 以前我们使用注解`SQLUserDefinedType`来为用户类注册UDTs。
+ * 然而，通过这样做，我们增加了SparkSQL对用户类的依赖性。
+ * 这个对象提供了另一种为用户类注册UDTs的方法，这个对象保留了用户类和它们的用户定义类型（UDTs）之间的映射。
  */
 private[spark]
 object UDTRegistration extends Serializable with Logging {

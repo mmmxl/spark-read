@@ -20,9 +20,10 @@ package org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.expressions.Attribute
 
 /**
- * A logical node that represents a non-query command to be executed by the system.  For example,
- * commands can be used by parsers to represent DDL operations.  Commands, unlike queries, are
+ * a logical node that represents a non-query command to be executed by the system.  for example,
+ * commands can be used by parsers to represent ddl operations.  commands, unlike queries, are
  * eagerly executed.
+ * 非查询操作，例如ddl操作，命令是立即执行，非惰性的
  */
 trait Command extends LogicalPlan {
   override def output: Seq[Attribute] = Seq.empty

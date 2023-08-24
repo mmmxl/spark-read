@@ -271,6 +271,10 @@ object Block {
  * track expressions (`ExprValue`) in this code block. We need to be able to manipulate the
  * expressions later without changing the behavior of this code block in some applications, e.g.,
  * method splitting.
+ * 一个java代码块。包括一连串的代码部分和一些输入到这个代码块。
+ * 实际的java代码是通过将输入嵌入到代码部件中生成的。
+ * 这里我们保留的输入，而不是简单地将它们折叠成一串代码，因为我们需要在这个代码块中跟踪表达式（`ExprValue`）。
+ * 我们需要在以后能够在不改变这个代码块的行为的情况下，在某些应用中对表达式进行操作，例如，方法拆分。
  */
 case class CodeBlock(codeParts: Seq[String], blockInputs: Seq[JavaCode]) extends Block {
   override def children: Seq[Block] =

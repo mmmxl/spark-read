@@ -31,9 +31,11 @@ import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStrea
 /**
  * Component which configures serialization, compression and encryption for various Spark
  * components, including automatic selection of which [[Serializer]] to use for shuffles.
+ *
+ * 该组件为各种Spark组件配置序列化、压缩和加密，包括自动选择用于shuffles的[[Serializer]]
  */
 private[spark] class SerializerManager(
-    defaultSerializer: Serializer,
+    defaultSerializer: Serializer, // 默认的序列化器
     conf: SparkConf,
     encryptionKey: Option[Array[Byte]]) {
 

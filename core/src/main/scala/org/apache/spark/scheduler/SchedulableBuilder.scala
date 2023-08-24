@@ -38,6 +38,7 @@ private[spark] trait SchedulableBuilder {
 
   def buildPools(): Unit
 
+  // 向调度池添加TaskSetManager
   def addTaskSetManager(manager: Schedulable, properties: Properties): Unit
 }
 
@@ -57,10 +58,10 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
   extends SchedulableBuilder with Logging {
 
   val SCHEDULER_ALLOCATION_FILE_PROPERTY = "spark.scheduler.allocation.file"
-  val schedulerAllocFile = conf.getOption(SCHEDULER_ALLOCATION_FILE_PROPERTY)
-  val DEFAULT_SCHEDULER_FILE = "fairscheduler.xml"
-  val FAIR_SCHEDULER_PROPERTIES = "spark.scheduler.pool"
-  val DEFAULT_POOL_NAME = "default"
+  val schedulerAllocFile = conf.getOption(SCHEDULER_ALLOCATION_FILE_PROPERTY) // 用户指定的调度文件名
+  val DEFAULT_SCHEDULER_FILE = "fairscheduler.xml" // 默认的调度文件名  读取此文件提供的公平调度配置
+  val FAIR_SCHEDULER_PROPERTIES = "spark.scheduler.pool" // 公平调度池名称
+  val DEFAULT_POOL_NAME = "default" // 默认调度池名
   val MINIMUM_SHARES_PROPERTY = "minShare"
   val SCHEDULING_MODE_PROPERTY = "schedulingMode"
   val WEIGHT_PROPERTY = "weight"

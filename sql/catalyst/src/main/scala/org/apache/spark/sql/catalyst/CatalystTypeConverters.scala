@@ -34,6 +34,7 @@ import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Functions to convert Scala types to Catalyst types and vice versa.
+ * Scala类型和Catelyst类型的互相转换
  */
 object CatalystTypeConverters {
   // The Predef.Map is scala.collection.immutable.Map.

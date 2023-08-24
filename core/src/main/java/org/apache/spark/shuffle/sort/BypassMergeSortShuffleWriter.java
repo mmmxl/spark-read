@@ -74,27 +74,28 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
 
   private static final Logger logger = LoggerFactory.getLogger(BypassMergeSortShuffleWriter.class);
 
-  private final int fileBufferSize;
-  private final boolean transferToEnabled;
-  private final int numPartitions;
+  private final int fileBufferSize; // 文件缓存大小 spark.shuffle.file.buffer=32kb
+  private final boolean transferToEnabled; // 是否采用NIO的从文件流到文件流的复制方式 spark.file.transferTo=true
+  private final int numPartitions; // 分区数
   private final BlockManager blockManager;
   private final Partitioner partitioner;
   private final ShuffleWriteMetrics writeMetrics;
-  private final int shuffleId;
-  private final int mapId;
-  private final Serializer serializer;
+  private final int shuffleId; // Shuffle的唯一标识
+  private final int mapId; // map任务的身份标识
+  private final Serializer serializer; // 序列化器
   private final IndexShuffleBlockResolver shuffleBlockResolver;
 
   /** Array of file writers, one for each partition */
-  private DiskBlockObjectWriter[] partitionWriters;
-  private FileSegment[] partitionWriterSegments;
-  @Nullable private MapStatus mapStatus;
-  private long[] partitionLengths;
+  private DiskBlockObjectWriter[] partitionWriters; // 每一个DiskBlockObjectWriter处理一个分区的数据
+  private FileSegment[] partitionWriterSegments; // 每一个FileSegment对应一个DiskBlockObjectWriter处理的文件片
+  @Nullable private MapStatus mapStatus; // map任务的状态
+  private long[] partitionLengths; // 每一元素记录一个分区的数据长度
 
   /**
    * Are we in the process of stopping? Because map tasks can call stop() with success = true
    * and then call stop() with success = false if they get an exception, we want to make sure
    * we don't try deleting files, etc twice.
+   * 是否正在停止中
    */
   private boolean stopping = false;
 
@@ -123,6 +124,8 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   public void write(Iterator<Product2<K, V>> records) throws IOException {
     assert (partitionWriters == null);
     if (!records.hasNext()) {
+      // 如果没有输出的记录，则只生成索引文件
+      // 只有0这一个偏移量
       partitionLengths = new long[numPartitions];
       shuffleBlockResolver.writeIndexFileAndCommit(shuffleId, mapId, partitionLengths, null);
       mapStatus = MapStatus$.MODULE$.apply(blockManager.shuffleServerId(), partitionLengths);
@@ -130,8 +133,10 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     }
     final SerializerInstance serInstance = serializer.newInstance();
     final long openStartTime = System.nanoTime();
+    // 创建partitionWriters和partitionWriterSegments数组
     partitionWriters = new DiskBlockObjectWriter[numPartitions];
     partitionWriterSegments = new FileSegment[numPartitions];
+    // 给每个分区创建分区数据待写入的文件,并调用BlockManager的getDiskWriter方法创建向此文件写入的DiskBlockObjectWriter
     for (int i = 0; i < numPartitions; i++) {
       final Tuple2<TempShuffleBlockId, File> tempShuffleBlockIdPlusFile =
         blockManager.diskBlockManager().createTempShuffleBlock();
@@ -145,28 +150,36 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     // included in the shuffle write time.
     writeMetrics.incWriteTime(System.nanoTime() - openStartTime);
 
+    // 迭代待输出的记录，使用分区计算器并通过每条记录的key，获取记录的分区id
+    // 调用此分区id对应的DiskBlockObjectWriter的write方法，向临时Shuffle文件的输出流中写入键值对
     while (records.hasNext()) {
       final Product2<K, V> record = records.next();
       final K key = record._1();
       partitionWriters[partitioner.getPartition(key)].write(key, record._2());
     }
 
+    // 调用每个分区对应的DiskBlockObjectWriter的commitAndGet方法
+    // 将临时Shuffle文件的输出流中的数据写入到磁盘,并将返回的FileSegment放入partitionWriterSegments数组,以此分区Id为索引的位置
     for (int i = 0; i < numPartitions; i++) {
       final DiskBlockObjectWriter writer = partitionWriters[i];
       partitionWriterSegments[i] = writer.commitAndGet();
       writer.close();
     }
 
+    // 获取Shuffle数据文件
     File output = shuffleBlockResolver.getDataFile(shuffleId, mapId);
     File tmp = Utils.tempFileWith(output);
     try {
+      // 将每个分区的文件合并到Shuffle数据文件中
       partitionLengths = writePartitionedFile(tmp);
+      // 生成Block文件对应的索引文件,此索引文件用于记录各个分区在Block文件中的对应偏移量，以便于reduce任务拉取时使用
       shuffleBlockResolver.writeIndexFileAndCommit(shuffleId, mapId, partitionLengths, tmp);
     } finally {
       if (tmp.exists() && !tmp.delete()) {
         logger.error("Error while deleting temp file {}", tmp.getAbsolutePath());
       }
     }
+    // 构造并返回MapStatus
     mapStatus = MapStatus$.MODULE$.apply(blockManager.shuffleServerId(), partitionLengths);
   }
 
@@ -176,28 +189,35 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   }
 
   /**
-   * Concatenate all of the per-partition files into a single combined file.
+   * Concatenate(连接) all of the per-partition files into a single combined file.
    *
    * @return array of lengths, in bytes, of each partition of the file (used by map output tracker).
    */
   private long[] writePartitionedFile(File outputFile) throws IOException {
     // Track location of the partition starts in the output file
+    // 创建长整数组，大小为分区数
     final long[] lengths = new long[numPartitions];
     if (partitionWriters == null) {
       // We were passed an empty iterator
       return lengths;
     }
 
+    // 打开正式输出的文件输出流
     final FileOutputStream out = new FileOutputStream(outputFile, true);
     final long writeStartTime = System.nanoTime();
     boolean threwException = true;
     try {
+      // 打开partitionWriterSegments中每个分区ID对应的文件的输入流
+      // 调用Utils.copyStream()将输入流中的字节拷贝到输出流中
+      // 由于遍历分区ID是从0开始的，因此最后写入分区数据文件的数据也是按照分区ID排好序的
+      // copyStream()将返回拷贝的字节数
       for (int i = 0; i < numPartitions; i++) {
         final File file = partitionWriterSegments[i].file();
         if (file.exists()) {
           final FileInputStream in = new FileInputStream(file);
           boolean copyThrewException = true;
           try {
+            // 将输入流中的字节拷贝到输出流中
             lengths[i] = Utils.copyStream(in, out, false, transferToEnabled);
             copyThrewException = false;
           } finally {

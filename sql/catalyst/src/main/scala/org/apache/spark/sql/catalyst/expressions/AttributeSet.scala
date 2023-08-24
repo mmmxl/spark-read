@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-
+/** 定义了比较Attribute相等性的方法 */
 protected class AttributeEquals(val a: Attribute) {
   override def hashCode(): Int = a match {
     case ar: AttributeReference => ar.exprId.hashCode()

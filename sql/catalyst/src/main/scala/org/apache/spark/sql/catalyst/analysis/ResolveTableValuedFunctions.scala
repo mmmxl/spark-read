@@ -27,6 +27,7 @@ import org.apache.spark.sql.types.{DataType, IntegerType, LongType}
 
 /**
  * Rule that resolves table-valued function references.
+ * 解析表值函数引用的rule
  */
 object ResolveTableValuedFunctions extends Rule[LogicalPlan] {
   /**
@@ -36,6 +37,7 @@ object ResolveTableValuedFunctions extends Rule[LogicalPlan] {
     /**
      * Try to cast the expressions to satisfy the expected types of this argument list. If there
      * are any types that cannot be casted, then None is returned.
+     * 尝试强制转换表达式以满足此参数列表的预期类型。如果有任何类型无法转换，则返回 None
      */
     def implicitCast(values: Seq[Expression]): Option[Seq[Expression]] = {
       if (args.length == values.length) {
@@ -59,6 +61,8 @@ object ResolveTableValuedFunctions extends Rule[LogicalPlan] {
   /**
    * A TVF maps argument lists to resolver functions that accept those arguments. Using a map
    * here allows for function overloading.
+   * 参数列表 -> 解析函数
+   * 允许方法重载
    */
   private type TVF = Map[ArgumentList, Seq[Any] => LogicalPlan]
 
@@ -79,6 +83,7 @@ object ResolveTableValuedFunctions extends Rule[LogicalPlan] {
 
   /**
    * Internal registry of table-valued functions.
+   * tvf的内部注册表
    */
   private val builtinFunctions: Map[String, TVF] = Map(
     "range" -> Map(

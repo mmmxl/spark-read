@@ -22,13 +22,15 @@ import java.util.Properties
 /**
  * A set of tasks submitted together to the low-level TaskScheduler, usually representing
  * missing partitions of a particular stage.
+ * TaskSet是整个调度池中对Task进行调度管理的基本单位
+ *
  */
 private[spark] class TaskSet(
     val tasks: Array[Task[_]],
     val stageId: Int,
     val stageAttemptId: Int,
-    val priority: Int,
-    val properties: Properties) {
+    val priority: Int, // 以jobId作为优先级
+    val properties: Properties /* 包含了与Job有关的调度、Job group、描述等属性的Properties */ ) {
   val id: String = stageId + "." + stageAttemptId
 
   override def toString: String = "TaskSet " + id

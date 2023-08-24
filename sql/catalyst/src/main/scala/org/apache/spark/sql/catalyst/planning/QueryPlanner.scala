@@ -25,6 +25,8 @@ import org.apache.spark.sql.catalyst.trees.TreeNode
  * Given a [[LogicalPlan]], returns a list of `PhysicalPlan`s that can
  * be used for execution. If this strategy does not apply to the given logical operation then an
  * empty list should be returned.
+ *
+ * 给定一个LogicalPlan，返回一个可用于执行的`PhysicalPlan`s列表。如果这个策略不适用于给定的逻辑操作，那么应该返回一个空列表。
  */
 abstract class GenericStrategy[PhysicalPlan <: TreeNode[PhysicalPlan]] extends Logging {
 
@@ -32,6 +34,8 @@ abstract class GenericStrategy[PhysicalPlan <: TreeNode[PhysicalPlan]] extends L
    * Returns a placeholder for a physical plan that executes `plan`. This placeholder will be
    * filled in automatically by the QueryPlanner using the other execution strategies that are
    * available.
+   * 返回一个执行`plan`的物理计划的占位符。
+   * 这个占位符将由QueryPlanner使用其他执行策略自动填充，这些策略是可用的。
    */
   protected def planLater(plan: LogicalPlan): PhysicalPlan
 
@@ -56,16 +60,25 @@ abstract class QueryPlanner[PhysicalPlan <: TreeNode[PhysicalPlan]] {
   /** A list of execution strategies that can be used by the planner */
   def strategies: Seq[GenericStrategy[PhysicalPlan]]
 
+  /**
+   * 1.由一序列策略生产一些候选物理树
+   * 2.
+   * 3.
+   * 1.
+   */
   def plan(plan: LogicalPlan): Iterator[PhysicalPlan] = {
     // Obviously a lot to do here still...
 
     // Collect physical plan candidates.
-    val candidates = strategies.iterator.flatMap(_(plan))
+    // 由策略生产的候选物理树
+    val candidates: Iterator[PhysicalPlan] = strategies.iterator.flatMap(_(plan))
 
     // The candidates may contain placeholders marked as [[planLater]],
     // so try to replace them by their child plans.
+    //
     val plans = candidates.flatMap { candidate =>
-      val placeholders = collectPlaceholders(candidate)
+      // 输入一个物理树，返回Seq(物理树, 逻辑树)
+      val placeholders: Seq[(PhysicalPlan, LogicalPlan)] = collectPlaceholders(candidate)
 
       if (placeholders.isEmpty) {
         // Take the candidate as is because it does not contain placeholders.
@@ -75,11 +88,12 @@ abstract class QueryPlanner[PhysicalPlan <: TreeNode[PhysicalPlan]] {
         placeholders.iterator.foldLeft(Iterator(candidate)) {
           case (candidatesWithPlaceholders, (placeholder, logicalPlan)) =>
             // Plan the logical plan for the placeholder.
-            val childPlans = this.plan(logicalPlan)
+            val childPlans: Iterator[PhysicalPlan] = this.plan(logicalPlan)
 
             candidatesWithPlaceholders.flatMap { candidateWithPlaceholders =>
               childPlans.map { childPlan =>
                 // Replace the placeholder by the child plan
+                // 用子树取代占位符
                 candidateWithPlaceholders.transformUp {
                   case p if p.eq(placeholder) => childPlan
                 }
@@ -100,6 +114,7 @@ abstract class QueryPlanner[PhysicalPlan <: TreeNode[PhysicalPlan]] {
    */
   protected def collectPlaceholders(plan: PhysicalPlan): Seq[(PhysicalPlan, LogicalPlan)]
 
-  /** Prunes bad plans to prevent combinatorial explosion. */
+  /** Prunes bad plans to prevent combinatorial explosion.
+   *  修剪不良计划，防止组合式爆炸 */
   protected def prunePlans(plans: Iterator[PhysicalPlan]): Iterator[PhysicalPlan]
 }

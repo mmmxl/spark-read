@@ -44,6 +44,7 @@ object Row {
 
   /**
    * This method can be used to construct a [[Row]] with the given values.
+   * 创建一个以对象数组为底层存储的row
    */
   def apply(values: Any*): Row = new GenericRow(values.toArray)
 

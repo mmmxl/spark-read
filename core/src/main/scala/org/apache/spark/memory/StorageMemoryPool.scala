@@ -26,21 +26,23 @@ import org.apache.spark.storage.memory.MemoryStore
 /**
  * Performs bookkeeping for managing an adjustable-size pool of memory that is used for storage
  * (caching)
- * 为管理用于存储的可调大小的内存池进行记账。
+ * 对于存储的物理内存的逻辑抽象，通过对存储内存的逻辑管理，提高Spark存储体系对内存的使用效率
  *
  * @param lock a [[MemoryManager]] instance to synchronize on
  * @param memoryMode the type of memory tracked by this pool (on- or off-heap)
  */
 private[memory] class StorageMemoryPool(
     lock: Object,
-    memoryMode: MemoryMode
+    memoryMode: MemoryMode // 内存模式
   ) extends MemoryPool(lock) with Logging {
 
+  // 内存池的名字
   private[this] val poolName: String = memoryMode match {
     case MemoryMode.ON_HEAP => "on-heap storage"
     case MemoryMode.OFF_HEAP => "off-heap storage"
   }
 
+  // 已经使用的内存大小(单位：字节)
   @GuardedBy("lock")
   private[this] var _memoryUsed: Long = 0L
 
@@ -48,6 +50,7 @@ private[memory] class StorageMemoryPool(
     _memoryUsed
   }
 
+  // 当前StorageMemoryPool所关联的MemoryStore
   private var _memoryStore: MemoryStore = _
   def memoryStore: MemoryStore = {
     if (_memoryStore == null) {
@@ -68,10 +71,11 @@ private[memory] class StorageMemoryPool(
 
   /**
    * Acquire N bytes of memory to cache the given block, evicting existing ones if necessary.
-   * 获取N个字节的内存来缓存给定的块，必要时驱逐现有的块。
+   * 给BlockId对应的Block获取numBytes指定大小的内存，必要时驱逐现有的块。
    * @return whether all N bytes were successfully granted.
    */
   def acquireMemory(blockId: BlockId, numBytes: Long): Boolean = lock.synchronized {
+    // 计算申请内存大小与空闲空间的撤销，如果大于0，说明需要腾出部分Block所占用的空间
     val numBytesToFree = math.max(0, numBytes - memoryFree)
     acquireMemory(blockId, numBytes, numBytesToFree)
   }
@@ -88,23 +92,29 @@ private[memory] class StorageMemoryPool(
       blockId: BlockId,
       numBytesToAcquire: Long,
       numBytesToFree: Long): Boolean = lock.synchronized {
+    // 参数检查
     assert(numBytesToAcquire >= 0)
     assert(numBytesToFree >= 0)
     assert(memoryUsed <= poolSize)
+    // 腾出numBytesToFree属性指定大小的空间
     if (numBytesToFree > 0) {
       memoryStore.evictBlocksToFreeSpace(Some(blockId), numBytesToFree, memoryMode)
     }
     // NOTE: If the memory store evicts blocks, then those evictions will synchronously call
     // back into this StorageMemoryPool in order to free memory. Therefore, these variables
     // should have been updated.
+    // 判断内存是否充足
     // 注意：如果内存存储驱逐区块，那么这些驱逐将同步回调到这个StorageMemoryPool，以便释放内存。因此，这些变量应该已经更新了。
     val enoughMemory = numBytesToAcquire <= memoryFree
+    // 增加已经使用的内存大小
     if (enoughMemory) {
       _memoryUsed += numBytesToAcquire
     }
+    // 返回布尔值
     enoughMemory
   }
 
+  /** 用于释放内存 */
   def releaseMemory(size: Long): Unit = lock.synchronized {
     if (size > _memoryUsed) {
       logWarning(s"Attempted to release $size bytes of storage " +
@@ -115,6 +125,7 @@ private[memory] class StorageMemoryPool(
     }
   }
 
+  /** 释放所有使用的内存 */
   def releaseAllMemory(): Unit = lock.synchronized {
     _memoryUsed = 0
   }
@@ -122,14 +133,22 @@ private[memory] class StorageMemoryPool(
   /**
    * Free space to shrink the size of this storage memory pool by `spaceToFree` bytes.
    * Note: this method doesn't actually reduce the pool size but relies on the caller to do so.
-   * 释放空间，将这个存储内存池的大小缩小`spaceToFree`字节。
+   * 用于释放指定大小的空间，缩小内存池的大小
    * 注意：本方法实际上并不缩小池的大小，而是依靠调用者来实现。
+   *
+   * if spaceToFree > memoryFree:
+   *     驱逐块
+   *     return 驱逐块的大小 + (spaceToFree - memoryFree)
+   * else:
+   *    return spaceToFree
    *
    * @return number of bytes to be removed from the pool's capacity.
    *         要从池的容量中删除的字节数。
    */
   def freeSpaceToShrinkPool(spaceToFree: Long): Long = lock.synchronized {
     /* 可以释放的不使用的内存 */
+    // min = spaceToFree => remainingSpaceToFree = 0
+    // min = memoryFree => remainingSpaceToFree = spaceToFree - memoryFree 即需要释放内存
     val spaceFreedByReleasingUnusedMemory = math.min(spaceToFree, memoryFree)
     val remainingSpaceToFree = spaceToFree - spaceFreedByReleasingUnusedMemory
     /* 用于释放不使用的内存不足 */

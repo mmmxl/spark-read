@@ -27,25 +27,31 @@ import org.apache.spark.sql.types.{DataType, IntegerType}
  *  - Inter-node partitioning of data: In this case the distribution describes how tuples are
  *    partitioned across physical machines in a cluster.  Knowing this property allows some
  *    operators (e.g., Aggregate) to perform partition local operations instead of global ones.
+ *    数据的节点间分区: 在这种情况下，分布描述了如何在集群中的物理机器之间对元组进行分区。
+ *    知道这个属性，就可以让一些运算符（如 Aggregate）执行分区局部操作，而不是全局操作。
  *  - Intra-partition ordering of data: In this case the distribution describes guarantees made
  *    about how tuples are distributed within a single partition.
+      数据的分区内排序: 在这种情况下，分布描述了关于如何在单个分区内分布元组的保证。
  */
 sealed trait Distribution {
   /**
    * The required number of partitions for this distribution. If it's None, then any number of
    * partitions is allowed for this distribution.
+   * 这个分布必须需要的分区数量。如果它是None，表示可以接受任意数量的分区
    */
   def requiredNumPartitions: Option[Int]
 
   /**
    * Creates a default partitioning for this distribution, which can satisfy this distribution while
    * matching the given number of partitions.
+   * 为这个分布创建一个默认的分区，这个分区可以满足这个分布要求的分区数
    */
   def createPartitioning(numPartitions: Int): Partitioning
 }
 
 /**
  * Represents a distribution where no promises are made about co-location of data.
+ * 代表一种不承诺数据共置的分布
  */
 case object UnspecifiedDistribution extends Distribution {
   override def requiredNumPartitions: Option[Int] = None
@@ -58,6 +64,7 @@ case object UnspecifiedDistribution extends Distribution {
 /**
  * Represents a distribution that only has a single partition and all tuples of the dataset
  * are co-located.
+ * 代表一个只有一个分区的分布，数据集的所有元组都是同位的。
  */
 case object AllTuples extends Distribution {
   override def requiredNumPartitions: Option[Int] = Some(1)
@@ -153,6 +160,7 @@ case class BroadcastDistribution(mode: BroadcastMode) extends Distribution {
 
 /**
  * Describes how an operator's output is split across partitions. It has 2 major properties:
+ * 描述操作者的输出如何在各个分区之间进行分割:
  *   1. number of partitions.
  *   2. if it can satisfy a given distribution.
  */
@@ -164,7 +172,9 @@ trait Partitioning {
    * Returns true iff the guarantees made by this [[Partitioning]] are sufficient
    * to satisfy the partitioning scheme mandated by the `required` [[Distribution]],
    * i.e. the current dataset does not need to be re-partitioned for the `required`
-   * Distribution (it is possible that tuples within a partition need to be reorganized).
+   * Distribution (it is possible that tuples within a partition need to be reorganized)
+   * 如果这个[[Partitioning]]所做的保证足以满足 "required"[[Distribution]]所规定的分区方案，
+   * 即当前数据集不需要为 "required "Distribution重新分区（分区内的元组有可能需要重组），则返回true。
    *
    * A [[Partitioning]] can never satisfy a [[Distribution]] if its `numPartitions` does't match
    * [[Distribution.requiredNumPartitions]].

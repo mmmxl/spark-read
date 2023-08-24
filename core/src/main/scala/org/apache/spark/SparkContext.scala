@@ -2404,6 +2404,9 @@ class SparkContext(config: SparkConf) extends Logging {
    * If <tt>checkSerializable</tt> is set, <tt>clean</tt> will also proactively
    * check to see if <tt>f</tt> is serializable and throw a <tt>SparkException</tt>
    * if not.
+   * 清理一个闭包，使其准备好被序列化并发送给任务
+   * （删除 $outer's 中未引用的变量，更新 REPL 变量）。
+   * 如果设置了checkSerializable，clean也会主动检查f是否可序列化，如果不可序列化，则抛出SparkException
    *
    * @param f the closure to clean
    * @param checkSerializable whether or not to immediately check <tt>f</tt> for serializability

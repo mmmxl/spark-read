@@ -180,6 +180,10 @@ case class HiveTableScanExec(
     prunedPartitions.map(HiveClientImpl.toHivePartition(_, hiveQlTable))
   }
 
+  /**
+   * 1.使用makrRDDForTable来获取rdd
+   * 2.使用mapPartitionsWithIndexInternal()
+   */
   protected override def doExecute(): RDD[InternalRow] = {
     // Using dummyCallSite, as getCallSite can turn out to be expensive with
     // multiple partitions.

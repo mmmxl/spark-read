@@ -35,8 +35,9 @@ class StageInfo(
     val numTasks: Int,
     val rddInfos: Seq[RDDInfo],
     val parentIds: Seq[Int],
-    val details: String,
-    val taskMetrics: TaskMetrics = null,
+    val details: String, // 详细的线程栈信息
+    val taskMetrics: TaskMetrics = null, // Task的度量信息
+    // 存储任务的本地性偏好
     private[spark] val taskLocalityPreferences: Seq[Seq[TaskLocation]] = Seq.empty) {
   /** When this stage was submitted from the DAGScheduler to a TaskScheduler. */
   var submissionTime: Option[Long] = None
@@ -48,6 +49,7 @@ class StageInfo(
   /**
    * Terminal values of accumulables updated during this stage, including all the user-defined
    * accumulators.
+   * 存储了所有累加器计算的最终值
    */
   val accumulables = HashMap[Long, AccumulableInfo]()
 

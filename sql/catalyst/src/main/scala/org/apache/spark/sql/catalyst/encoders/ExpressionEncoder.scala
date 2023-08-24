@@ -101,6 +101,7 @@ object ExpressionEncoder {
    * Given a set of N encoders, constructs a new encoder that produce objects as items in an
    * N-tuple.  Note that these encoders should be unresolved so that information about
    * name/positional binding is preserved.
+   * 多个encoders合成为一个encoder
    */
   def tuple(encoders: Seq[ExpressionEncoder[_]]): ExpressionEncoder[_] = {
     encoders.foreach(_.assertUnresolved())
@@ -249,6 +250,11 @@ case class ExpressionEncoder[T](
    * binding stuff should happen inside query framework.  However, in some cases we need to
    * use encoder as a function to do serialization directly(e.g. Dataset.collect), then we can use
    * this method to do resolution and binding outside of query framework.
+   * 返回该编码器的新副本，其中的 "deserializer "被解析并绑定到给定的模式。
+   *
+   * 请注意，理想情况下，编码器是作为serde表达式的容器使用的，解析和绑定的事情应该发生在查询框架内部。
+   * 然而，在某些情况下，我们需要使用 encoder 作为一个函数直接进行序列化（例如 Dataset.collect），
+   * 那么我们可以使用这个方法在查询框架之外进行解析和绑定。
    */
   def resolveAndBind(
       attrs: Seq[Attribute] = schema.toAttributes,
@@ -262,17 +268,18 @@ case class ExpressionEncoder[T](
   }
 
   @transient
-  private lazy val extractProjection = GenerateUnsafeProjection.generate(serializer)
+  private lazy val extractProjection: UnsafeProjection = GenerateUnsafeProjection.generate(serializer)
 
   @transient
-  private lazy val inputRow = new GenericInternalRow(1)
+  private lazy val inputRow: GenericInternalRow = new GenericInternalRow(1)
 
   @transient
-  private lazy val constructProjection = GenerateSafeProjection.generate(deserializer :: Nil)
+  private lazy val constructProjection: Projection = GenerateSafeProjection.generate(deserializer :: Nil)
 
   /**
    * Returns a new set (with unique ids) of [[NamedExpression]] that represent the serialized form
    * of this object.
+   * 返回一个新的[[NamedExpression]]集合（具有唯一的id），它代表了这个对象的序列化形式。
    */
   def namedExpressions: Seq[NamedExpression] = schema.map(_.name).zip(serializer).map {
     case (_, ne: NamedExpression) => ne.newInstance()
@@ -283,6 +290,7 @@ case class ExpressionEncoder[T](
    * Returns an encoded version of `t` as a Spark SQL row.  Note that multiple calls to
    * toRow are allowed to return the same actual [[InternalRow]] object.  Thus, the caller should
    * copy the result before making another call if required.
+   * 从值转换成row
    */
   def toRow(t: T): InternalRow = try {
     inputRow(0) = t
@@ -297,6 +305,7 @@ case class ExpressionEncoder[T](
    * Returns an object of type `T`, extracting the required values from the provided row.  Note that
    * you must `resolveAndBind` an encoder to a specific schema before you can call this
    * function.
+   * 从InternalRow中提取出对应的值
    */
   def fromRow(row: InternalRow): T = try {
     constructProjection(row).get(0, ObjectType(clsTag.runtimeClass)).asInstanceOf[T]

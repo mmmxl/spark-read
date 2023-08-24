@@ -56,7 +56,7 @@ import org.apache.spark.util.CallSite
 private[scheduler] abstract class Stage(
     val id: Int,
     val rdd: RDD[_],
-    val numTasks: Int,
+    val numTasks: Int, // 任务数
     val parents: List[Stage],
     val firstJobId: Int,
     val callSite: CallSite)
@@ -64,10 +64,10 @@ private[scheduler] abstract class Stage(
 
   val numPartitions = rdd.partitions.length
 
-  /** Set of jobs that this stage belongs to. */
+  /** Set of jobs that this stage belongs to. stage可以属于一到多个Job */
   val jobIds = new HashSet[Int]
 
-  /** The ID to use for the next new attempt for this stage. */
+  /** The ID to use for the next new attempt for this stage. 用于生成Stage下一次尝试的身份标识 */
   private var nextAttemptId: Int = 0
 
   val name: String = callSite.shortForm
@@ -78,6 +78,7 @@ private[scheduler] abstract class Stage(
    * here, before any attempts have actually been created, because the DAGScheduler uses this
    * StageInfo to tell SparkListeners when a job starts (which happens before any stage attempts
    * have been created).
+   * Stage最近一次尝试的信息，即StageInfo
    */
   private var _latestInfo: StageInfo = StageInfo.fromStage(this, nextAttemptId)
 
@@ -86,6 +87,7 @@ private[scheduler] abstract class Stage(
    * endless retries if a stage keeps failing.
    * We keep track of each attempt ID that has failed to avoid recording duplicate failures if
    * multiple tasks from the same stage attempt fail (SPARK-5945).
+   * 发生过FetchFailure的Stage尝试的身份标识的集合。此属性用于避免在发生FetchFailure后无止境的重试。
    */
   val failedAttemptIds = new HashSet[Int]
 
@@ -93,7 +95,8 @@ private[scheduler] abstract class Stage(
     failedAttemptIds.clear()
   }
 
-  /** Creates a new attempt for this stage by creating a new StageInfo with a new attempt ID. */
+  /** Creates a new attempt for this stage by creating a new StageInfo with a new attempt ID.
+   * 用于创建新的Stage尝试 */
   def makeNewStageAttempt(
       numPartitionsToCompute: Int,
       taskLocalityPreferences: Seq[Seq[TaskLocation]] = Seq.empty): Unit = {

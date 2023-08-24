@@ -30,6 +30,8 @@ import org.apache.spark.storage.RDDBlockId
  * RDD will Spark ever attempt to compute this CheckpointRDD. When this happens, however,
  * we must provide an informative error message.
  *
+ * 这里实现了rdd5大特性的2个: compute()和getPartitions()
+ *
  * @param sc the active SparkContext
  * @param rddId the ID of the checkpointed RDD
  * @param numPartitions the number of partitions in the checkpointed RDD
@@ -40,10 +42,12 @@ private[spark] class LocalCheckpointRDD[T: ClassTag](
     numPartitions: Int)
   extends CheckpointRDD[T](sc) {
 
+  // 外部是调用的这个构造器
   def this(rdd: RDD[T]) {
     this(rdd.context, rdd.id, rdd.partitions.length)
   }
 
+  // 生成分区
   protected override def getPartitions: Array[Partition] = {
     (0 until numPartitions).toArray.map { i => new CheckpointRDDPartition(i) }
   }
@@ -55,6 +59,12 @@ private[spark] class LocalCheckpointRDD[T: ClassTag](
    * executor is lost. Under normal circumstances, however, the original RDD (our child)
    * is expected to be fully cached and so all partitions should already be computed and
    * available in the block storage.
+   * 抛出一个异常，表示没有找到相关的块。
+   * 只有在原始 RDD 显式unpersisted或丢失executor的情况下，才应调用该异常。
+   * 然而，在正常情况下，原始RDD（我们的子程序）预计会被完全缓存，因此所有的分区应该已经被计算出来并在块存储中可用。
+   *
+   * 理论上这里数据已经全部缓存在本地存储系统中，不应该调用到该方法。
+   * 导致该现象的原因是unpersisted()这个rdd,或者存储的executor丢失了。
    */
   override def compute(partition: Partition, context: TaskContext): Iterator[T] = {
     throw new SparkException(

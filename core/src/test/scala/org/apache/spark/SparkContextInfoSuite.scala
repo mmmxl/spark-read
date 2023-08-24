@@ -86,7 +86,6 @@ package object testPackage extends Assertions {
     val rdd = sc.makeRDD(Array(1, 2, 3, 4), 2)
     val rddCreationSite = rdd.getCreationSite
     val curCallSite = sc.getCallSite().shortForm // note: 2 lines after definition of "rdd"
-
     val rddCreationLine = rddCreationSite match {
       case CALL_SITE_REGEX(func, file, line) =>
         assert(func === "makeRDD")

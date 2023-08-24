@@ -107,6 +107,7 @@ case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataT
           s"Type ${other.catalogString} does not support ordered operations")
     }
 
+    /** 2个ArrayData比较,只比较2者最短长度 */
     def compare(x: ArrayData, y: ArrayData): Int = {
       val leftArray = x
       val rightArray = y

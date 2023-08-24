@@ -33,6 +33,9 @@ import org.apache.spark.util.CallSite
  * ShuffleMapStages can also be submitted independently as jobs with DAGScheduler.submitMapStage.
  * For such stages, the ActiveJobs that submitted them are tracked in `mapStageJobs`. Note that
  * there can be multiple ActiveJobs trying to compute the same shuffle map stage.
+ *
+ * DAG调度流程中的中间Stage，它可以包括一到多个ShuffleMapTask，这些ShuffleMapTask将生产用于Shuffle的数据。
+ * ShuffleMapTask将生产用于Shuffle的数据。ShuffleMapStage一般是ResultStage或者其他Stage的前置Stage。
  */
 private[spark] class ShuffleMapStage(
     id: Int,
@@ -41,11 +44,11 @@ private[spark] class ShuffleMapStage(
     parents: List[Stage],
     firstJobId: Int,
     callSite: CallSite,
-    val shuffleDep: ShuffleDependency[_, _, _],
+    val shuffleDep: ShuffleDependency[_, _, _], // 与ShuffleMapStage对应的ShuffleDependency
     mapOutputTrackerMaster: MapOutputTrackerMaster)
   extends Stage(id, rdd, numTasks, parents, firstJobId, callSite) {
 
-  private[this] var _mapStageJobs: List[ActiveJob] = Nil
+  private[this] var _mapStageJobs: List[ActiveJob] = Nil // 活跃job列表
 
   /**
    * Partitions that either haven't yet been computed, or that were computed on an executor
@@ -55,6 +58,7 @@ private[spark] class ShuffleMapStage(
    * removed from pendingPartitions. As a result, this variable may be inconsistent with the pending
    * tasks in the TaskSetManager for the active attempt for the stage (the partitions stored here
    * will always be a subset of the partitions that the TaskSetManager thinks are pending).
+   * 存储待处理分区的索引的集合
    */
   val pendingPartitions = new HashSet[Int]
 
@@ -63,6 +67,7 @@ private[spark] class ShuffleMapStage(
   /**
    * Returns the list of active jobs,
    * i.e. map-stage jobs that were submitted to execute this stage independently (if any).
+   *
    */
   def mapStageJobs: Seq[ActiveJob] = _mapStageJobs
 
@@ -84,6 +89,7 @@ private[spark] class ShuffleMapStage(
 
   /**
    * Returns true if the map stage is ready, i.e. all partitions have shuffle outputs.
+   * 是否所有分区的任务都执行成功
    */
   def isAvailable: Boolean = numAvailableOutputs == numPartitions
 

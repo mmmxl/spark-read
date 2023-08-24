@@ -42,6 +42,7 @@ case class ReturnAnswer(child: LogicalPlan) extends UnaryNode {
 /**
  * This node is inserted at the top of a subquery when it is optimized. This makes sure we can
  * recognize a subquery as such, and it allows us to write subquery aware transformations.
+ * 当子查询被优化时，这个节点被插入到子查询的顶部。这确保我们能够识别出一个子查询，并允许我们编写子查询感知的转换。
  */
 case class Subquery(child: LogicalPlan) extends OrderPreservingUnaryNode {
   override def output: Seq[Attribute] = child.output
@@ -49,10 +50,14 @@ case class Subquery(child: LogicalPlan) extends OrderPreservingUnaryNode {
 
 case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
     extends OrderPreservingUnaryNode {
+  // 执行Project操作的输出描述
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
+  // 子节点的最大行限制
   override def maxRows: Option[Long] = child.maxRows
 
+  // 是否解析
   override lazy val resolved: Boolean = {
+    // 检测是否存在联合表达式、生成操作、开窗操作
     val hasSpecialExpressions = projectList.exists ( _.collect {
         case agg: AggregateExpression => agg
         case generator: Generator => generator
@@ -60,9 +65,12 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
       }.nonEmpty
     )
 
+    // Project中表达式都解析了，所有子节点都解析了，且不包含特殊表达式
     !expressions.exists(!_.resolved) && childrenResolved && !hasSpecialExpressions
   }
 
+  // constrain 约束; 限制
+  // 获取所有有效的约束条件
   override def validConstraints: Set[Expression] =
     child.constraints.union(getAliasedConstraints(projectList))
 }

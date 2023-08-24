@@ -22,6 +22,7 @@ import org.apache.spark.internal.Logging
 /**
  * A library for easily manipulating trees of operators.  Operators that extend TreeNode are
  * granted the following interface:
+ * 一个用于轻松操作操作符树的库。 扩展TreeNode的操作符被授予以下接口
  * <ul>
  *   <li>Scala collection like methods (foreach, map, flatMap, collect, etc)</li>
  *   <li>
@@ -42,6 +43,7 @@ package object trees extends Logging {
    * TreeNode的引用比较
    */
   class TreeNodeRef(val obj: TreeNode[_]) {
+    // 这里等一个引用相等
     override def equals(o: Any): Boolean = o match {
       case that: TreeNodeRef => that.obj.eq(obj)
       case _ => false

@@ -37,8 +37,10 @@ object NamedExpression {
  * A globally unique id for a given named expression.
  * Used to identify which attribute output by a relation is being
  * referenced in a subsequent computation.
+ * 一个给定命名表达式的全局唯一ID。用来识别关系的哪个属性输出正在被在随后的计算中被引用。
  *
  * The `id` field is unique within a given JVM, while the `uuid` is used to uniquely identify JVMs.
+ * `id`字段在一个给定的JVM中是唯一的，而`uuid`则用于唯一地识别JVM。
  */
 case class ExprId(id: Long, jvmId: UUID) {
 
@@ -57,6 +59,7 @@ object ExprId {
 
 /**
  * An [[Expression]] that is named.
+ * 一个被命名的表达式
  */
 trait NamedExpression extends Expression {
 
@@ -70,27 +73,36 @@ trait NamedExpression extends Expression {
    * Returns a dot separated fully qualified name for this attribute.  Given that there can be
    * multiple qualifiers, it is possible that there are other possible way to refer to this
    * attribute.
+   * e.g. db.t1.a  t1.a  a
    */
   def qualifiedName: String = (qualifier :+ name).mkString(".")
 
   /**
-   * Optional qualifier for the expression.
+   * Optional qualifier(修饰符) for the expression.
    * Qualifier can also contain the fully qualified information, for e.g, Sequence of string
    * containing the database and the table name
+   * 表达式的可选限定符(修饰符)。修饰符也可以包含完全限定的信息，例如，包含数据库和表名的字符串序列。
    *
    * For now, since we do not allow using original table name to qualify a column name once the
    * table is aliased, this can only be:
+   * 目前，由于我们不允许使用原始表名来限定列名，一旦表被别名，这只能是。
    *
    * 1. Empty Seq: when an attribute doesn't have a qualifier,
    *    e.g. top level attributes aliased in the SELECT clause, or column from a LocalRelation.
    * 2. Seq with a Single element: either the table name or the alias name of the table.
    * 3. Seq with 2 elements: database name and table name
+   *
+   * 1.空序列：当一个属性没有限定词时，例如在SELECT子句中别名的顶层属性，或来自LocalRelation的列 Seq()
+   * 2.序列中包含一个单一元素：表名或表的别名 Seq(table_1)
+   * 3.有2个元素的Seq：数据库名称和表名。 Seq(db, table_1)
    */
   def qualifier: Seq[String]
 
   def toAttribute: Attribute
 
-  /** Returns the metadata when an expression is a reference to another expression with metadata. */
+  /** Returns the metadata when an expression is a reference to another expression with metadata.
+   * 当一个表达式是对另一个有元数据的表达式的引用时，返回元数据。
+   */
   def metadata: Metadata = Metadata.empty
 
   /** Returns a copy of this expression with a new `exprId`. */
@@ -107,6 +119,9 @@ trait NamedExpression extends Expression {
     }
 }
 
+/**
+ * 属性: 有名称的并且输入null返回null的叶子表达式
+ */
 abstract class Attribute extends LeafExpression with NamedExpression with NullIntolerant {
 
   override def references: AttributeSet = AttributeSet(this)
@@ -129,6 +144,7 @@ abstract class Attribute extends LeafExpression with NamedExpression with NullIn
  *
  * Note that exprId and qualifiers are in a separate parameter list because
  * we only pattern match on child and name.
+ * 请注意，exprId和限定符是在一个单独的参数列表中，因为我们只对子代和名字进行模式匹配。
  *
  * @param child The computation being performed
  * @param name The name to be associated with the result of computing [[child]].
@@ -138,6 +154,7 @@ abstract class Attribute extends LeafExpression with NamedExpression with NullIn
  *                  fully qualified way. Consider the examples tableName.name, subQueryAlias.name.
  *                  tableName and subQueryAlias are possible qualifiers.
  * @param explicitMetadata Explicit metadata associated with this alias that overwrites child's.
+ *                         与此别名相关的显式元数据，覆盖了孩子结点的
  */
 case class Alias(child: Expression, name: String)(
     val exprId: ExprId = NamedExpression.newExprId,
@@ -212,6 +229,7 @@ case class Alias(child: Expression, name: String)(
 
 /**
  * A reference to an attribute produced by another operator in the tree.
+ * 对树中另一个运算符生成的属性的引用。
  *
  * @param name The name of this attribute, should only be used during analysis or for debugging.
  * @param dataType The [[DataType]] of this attribute.
@@ -236,9 +254,11 @@ case class AttributeReference(
   require(qualifier.length <= 2)
   /**
    * Returns true iff the expression id is the same for both attributes.
+   * 比较两者是否引用相等
    */
   def sameRef(other: AttributeReference): Boolean = this.exprId == other.exprId
 
+  /** 值相等 */
   override def equals(other: Any): Boolean = other match {
     case ar: AttributeReference =>
       name == ar.name && dataType == ar.dataType && nullable == ar.nullable &&
@@ -338,6 +358,8 @@ case class AttributeReference(
 /**
  * A place holder used when printing expressions without debugging information such as the
  * expression id or the unresolved indicator.
+ * 打印表达式时使用的占位符，没有表达式id或未解析指示符等调试信息。
+ * 基本方法都为不支持
  */
 case class PrettyAttribute(
     name: String,
@@ -371,6 +393,8 @@ case class PrettyAttribute(
 /**
  * A place holder used to hold a reference that has been resolved to a field outside of the current
  * plan. This is used for correlated subqueries.
+ * 用于保存已解析到当前计划之外的字段的引用的占位符。这用于相关子查询。
+ * 只是做了一层包装，并且修改了prettyName
  */
 case class OuterReference(e: NamedExpression)
   extends LeafExpression with NamedExpression with Unevaluable {
@@ -387,6 +411,7 @@ case class OuterReference(e: NamedExpression)
 
 object VirtualColumn {
   // The attribute name used by Hive, which has different result than Spark, deprecated.
+  // Hive使用的属性名，与Spark的结果不同，已废弃Hive使用的属性名，与Spark的结果不同，已废弃。
   val hiveGroupingIdName: String = "grouping__id"
   val groupingIdName: String = "spark_grouping_id"
   val groupingIdAttribute: UnresolvedAttribute = UnresolvedAttribute(groupingIdName)

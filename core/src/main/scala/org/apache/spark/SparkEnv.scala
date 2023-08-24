@@ -223,19 +223,20 @@ object SparkEnv extends Logging {
 
   /**
    * Helper method to create a SparkEnv for a driver or an executor.
+   * 创建driver或者executor的辅助方法
    */
   private def create(
       conf: SparkConf,
       executorId: String,
-      bindAddress: String,
-      advertiseAddress: String,
-      port: Option[Int],
-      isLocal: Boolean,
-      numUsableCores: Int,
-      ioEncryptionKey: Option[Array[Byte]],
-      listenerBus: LiveListenerBus = null,
+      bindAddress: String, /* 绑定地址 */
+      advertiseAddress: String, /* 公开地址  */
+      port: Option[Int], /* 端口 */
+      isLocal: Boolean, /* 是否本地 */
+      numUsableCores: Int, /* cores */
+      ioEncryptionKey: Option[Array[Byte]], /* io加密key */
+      listenerBus: LiveListenerBus = null, /* 系统总线 */
       mockOutputCommitCoordinator: Option[OutputCommitCoordinator] = None): SparkEnv = {
-
+    // 判断是否是driver
     val isDriver = executorId == SparkContext.DRIVER_IDENTIFIER
 
     // Listener bus is only used on the driver
@@ -243,6 +244,7 @@ object SparkEnv extends Logging {
       assert(listenerBus != null, "Attempted to create driver SparkEnv with null listener bus!")
     }
 
+    // 创建安全管理器
     val securityManager = new SecurityManager(conf, ioEncryptionKey)
     if (isDriver) {
       securityManager.initializeAuth()
@@ -256,6 +258,7 @@ object SparkEnv extends Logging {
     }
     /* 生成系统名称systemName */
     val systemName = if (isDriver) driverSystemName else executorSystemName
+    /* 创建rpc环境 */
     val rpcEnv = RpcEnv.create(systemName, bindAddress, advertiseAddress, port.getOrElse(-1), conf,
       securityManager, numUsableCores, !isDriver)
 
@@ -290,12 +293,14 @@ object SparkEnv extends Logging {
       instantiateClass[T](conf.get(propertyName, defaultClassName))
     }
 
+    /* 默认的序列化器是spark的Java序列化 可以通过spark.serializer来设置其他的序列化实现 */
     val serializer = instantiateClassFromConf[Serializer](
       "spark.serializer", "org.apache.spark.serializer.JavaSerializer")
     logDebug(s"Using serializer: ${serializer.getClass}")
 
     val serializerManager = new SerializerManager(serializer, conf, ioEncryptionKey)
 
+    /* 必包的序列化器是org.apache.spark.serializer.JavaSerializer */
     val closureSerializer = new JavaSerializer(conf)
 
     def registerOrLookupEndpoint(

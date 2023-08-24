@@ -340,6 +340,7 @@ object functions {
 
   /**
    * Aggregate function: returns the Pearson Correlation Coefficient for two columns.
+   * 返回两列的Pearson相关系数
    *
    * @group agg_funcs
    * @since 1.6.0

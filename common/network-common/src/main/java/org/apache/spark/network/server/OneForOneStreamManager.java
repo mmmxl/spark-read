@@ -37,12 +37,13 @@ import org.apache.spark.network.client.TransportClient;
 /**
  * StreamManager which allows registration of an Iterator&lt;ManagedBuffer&gt;, which are
  * individually fetched as chunks by the client. Each registered buffer is one chunk.
+ * 一对一的流服务
  */
 public class OneForOneStreamManager extends StreamManager {
   private static final Logger logger = LoggerFactory.getLogger(OneForOneStreamManager.class);
 
-  private final AtomicLong nextStreamId;
-  private final ConcurrentHashMap<Long, StreamState> streams;
+  private final AtomicLong nextStreamId; // 用于生成数据流的标识
+  private final ConcurrentHashMap<Long, StreamState> streams; // 维护streamId与SteamState之间映射关系的缓存
 
   /** State of a single stream. */
   private static class StreamState {
@@ -54,15 +55,16 @@ public class OneForOneStreamManager extends StreamManager {
 
     // Used to keep track of the index of the buffer that the user has retrieved, just to ensure
     // that the caller only requests each chunk one at a time, in order.
+    // 为了保证客户端按顺序每次请求一个块，所以用此属性跟踪客户端当前接收到的ManagedBuffer的索引
     int curChunk = 0;
 
     // Used to keep track of the number of chunks being transferred and not finished yet.
     volatile long chunksBeingTransferred = 0L;
 
     StreamState(String appId, Iterator<ManagedBuffer> buffers, Channel channel) {
-      this.appId = appId;
-      this.buffers = Preconditions.checkNotNull(buffers);
-      this.associatedChannel = channel;
+      this.appId = appId; // 请求流所属的应用程序ID
+      this.buffers = Preconditions.checkNotNull(buffers); // ManagedBuffer的缓冲
+      this.associatedChannel = channel; // 与当前流相关联的channel
     }
   }
 

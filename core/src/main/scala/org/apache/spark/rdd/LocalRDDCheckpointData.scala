@@ -31,17 +31,30 @@ import org.apache.spark.util.Utils
  * step of saving the RDD data to a reliable and fault-tolerant storage. Instead, the data
  * is written to the local, ephemeral block storage that lives in each executor. This is useful
  * for use cases where RDDs build up long lineages that need to be truncated often (e.g. GraphX).
+ * 在Spark的缓存层之上实现了检查点。
+ * 本地检查点通过跳过将RDD数据保存到可靠的容错存储这一昂贵步骤，来换取性能。
+ * 取而代之的是，数据被写入住在每个执行器中的本地、短暂的块存储。
+ * 这对于RDD建立需要经常截断的冗长血缘的使用案例来说非常有用（例如GraphX）。
+ *
+ * 用本地的block来取代稳定容错的存储来做checkpoint
+ * e.g. Yarn模式下,用persist的block level来取代hdfs上的checkpoint文件
  */
 private[spark] class LocalRDDCheckpointData[T: ClassTag](@transient private val rdd: RDD[T])
   extends RDDCheckpointData[T](rdd) with Logging {
 
   /**
    * Ensure the RDD is fully cached so the partitions can be recovered later.
+   * 1.检查StorageLevel是否包含Disk
+   * 2.计算出rdd有哪些分区没生成block
+   * 3.如果有分区未生成block,就执行rdd的这些分区
+   * 4.创建LocalCheckpointRDD
    */
   protected override def doCheckpoint(): CheckpointRDD[T] = {
     val level = rdd.getStorageLevel
 
     // Assume storage level uses disk; otherwise memory eviction may cause data loss
+    // 断言保证存储层使用磁盘，否则内存疏散(存储内存不足时)可能导致数据丢失
+    // appropriate 恰当的
     assume(level.useDisk, s"Storage level $level is not appropriate for local checkpointing")
 
     // Not all actions compute all partitions of the RDD (e.g. take). For correctness, we

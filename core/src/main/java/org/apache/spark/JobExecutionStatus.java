@@ -19,6 +19,9 @@ package org.apache.spark;
 
 import org.apache.spark.util.EnumUtil;
 
+/**
+ * Job执行的4种状态
+ */
 public enum JobExecutionStatus {
   RUNNING,
   SUCCEEDED,

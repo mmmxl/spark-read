@@ -30,9 +30,11 @@ package object analysis {
   /**
    * Resolver should return true if the first string refers to the same entity as the second string.
    * For example, by using case insensitive equality.
+   * 如果第一个字符串与第二个字符串指向同一个实体，解析器应该返回true。例如，通过使用不区分大小写的等价。
    */
   type Resolver = (String, String) => Boolean
 
+  // Resolver类型, 一个是不区分大小写，一个是区别大小写，默认不区分大小写
   val caseInsensitiveResolution = (a: String, b: String) => a.equalsIgnoreCase(b)
   val caseSensitiveResolution = (a: String, b: String) => a == b
 

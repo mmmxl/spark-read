@@ -35,6 +35,13 @@ import org.apache.spark.util.Utils
  *   respecting the directory's hierarchy.
  *
  * Only streaming (openStream) is supported.
+ *
+ * StreamManager实现了从NettyRpcEnv中服务文件。
+ * 在这个管理器中可以注册三种资源，所有资源都有实际的文件支持。
+ * - "/files": 一个扁平的文件列表; 用作[[SparkContext.addFile]]的后端。
+ *  - "/jars"：一个扁平的文件列表；作为[[SparkContext.addJar]]的后端使用。
+ * - 任意目录；该目录下的所有文件都可以通过管理器获得，尊重该目录的层次结构。
+ * 只支持流（openStream）。
  */
 private[netty] class NettyStreamManager(rpcEnv: NettyRpcEnv)
   extends StreamManager with RpcEnvFileServer {
@@ -47,6 +54,9 @@ private[netty] class NettyStreamManager(rpcEnv: NettyRpcEnv)
     throw new UnsupportedOperationException()
   }
 
+  /**
+   * 从缓存中获取文件后,将transportConf及File等信息封装成FileSegmentManagedBuffer返回
+   */
   override def openStream(streamId: String): ManagedBuffer = {
     val Array(ftype, fname) = streamId.stripPrefix("/").split("/", 2)
     val file = ftype match {
@@ -67,6 +77,7 @@ private[netty] class NettyStreamManager(rpcEnv: NettyRpcEnv)
 
   override def addFile(file: File): String = {
     val existingPath = files.putIfAbsent(file.getName, file)
+    // 如果文件不存在或者文件名相同但实际文件不同 则报错
     require(existingPath == null || existingPath == file,
       s"File ${file.getName} was already registered with a different path " +
         s"(old path = $existingPath, new path = $file")

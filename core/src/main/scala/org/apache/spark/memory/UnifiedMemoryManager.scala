@@ -21,6 +21,9 @@ import org.apache.spark.SparkConf
 import org.apache.spark.storage.BlockId
 
 /**
+ * UnifiedMemoryManager提供了统一的内存管理机制，
+ * 即Spark应用程序在运行期的存储内存和执行内存将共享统一的内存空间，可以动态调节两块内存的空间大小。
+ *
  * A [[MemoryManager]] that enforces a soft boundary between execution and storage such that
  * either side can borrow memory from the other.
  *
@@ -44,10 +47,13 @@ import org.apache.spark.storage.BlockId
  * 其含义是，如果执行已经吃掉了大部分存储空间，那么缓存块的尝试可能会失败，在这种情况下，新的块会立即被驱逐掉
  * 根据各自的存储水平。
  * 总结:execution可以抢占storage的内存空间,storage需要的时候可以不归还.
- *     storage可以抢占storage的内存空间,execution需要的时候必须归还.
+ *     storage可以抢占execution的内存空间,execution需要的时候必须归还.
  * 预留内存:300m 存储内存比例:0.5 maxMemory比例:0.6
- * * 1g - 300m = 700m => 700*0.6=420m storageMemory=executionMemory=210m
- * @param maxHeapMemory 420m
+ * 1g - 300m = 724m => 724*0.6=434m storageMemory=executionMemory=217m
+ *
+ * 在MemoryManger的内存模型之上，将计算内存和存储内存之间的边界修改为"软"边界，即任何一方可以向另一方借用空闲的内存
+ *
+ * @param maxHeapMemory 434m
  * @param onHeapStorageRegionSize Size of the storage region, in bytes.
  *                          This region is not statically reserved; execution can borrow from
  *                          it if necessary. Cached blocks can be evicted only if actual
@@ -56,8 +62,8 @@ import org.apache.spark.storage.BlockId
  */
 private[spark] class UnifiedMemoryManager private[memory] (
     conf: SparkConf,
-    val maxHeapMemory: Long,
-    onHeapStorageRegionSize: Long,
+    val maxHeapMemory: Long, /* 最大堆内存  */
+    onHeapStorageRegionSize: Long, /* 用于存储的堆内存大小  */
     numCores: Int)
   extends MemoryManager(
     conf,
@@ -79,7 +85,7 @@ private[spark] class UnifiedMemoryManager private[memory] (
     maxHeapMemory - onHeapExecutionMemoryPool.memoryUsed
   }
 
-  /** 可用于存储的堆外内存总量 = 堆内内存池总量 - 存储内存已经使用总量 */
+  /** 可用于存储的堆外内存总量 = 堆内内存池总量 - 执行内存已经使用总量 */
   override def maxOffHeapStorageMemory: Long = synchronized {
     maxOffHeapMemory - offHeapExecutionMemoryPool.memoryUsed
   }
@@ -178,12 +184,21 @@ private[spark] class UnifiedMemoryManager private[memory] (
       numBytes, taskAttemptId, maybeGrowExecutionPool, () => computeMaxExecutionPoolSize)
   }
 
+  /** 为存储BlockId对应的Block，从堆内存或堆外内存获取所需大小的内存
+   * 1.根据内存模式，获取此内存模式的计算内存池和可以存储的最大空间
+   * 2.对要获得的存储大小进行校验，即numBytes不能大于可以存储的最大空间
+   * 3.如果要获得的存储大小比存储内存池的空闲空间要大，那么就到计算内存池中借用空间
+   *   借用的空间取max(numBytes, 计算内存池的空闲空间)
+   * 4.从存储内存池获得存储BlockId对应的Block所需的空间
+   */
   override def acquireStorageMemory(
       blockId: BlockId,
       numBytes: Long,
       memoryMode: MemoryMode): Boolean = synchronized {
+    // 参数检查
     assertInvariants()
     assert(numBytes >= 0)
+    // 1.根据内存模式，获取此内存模式的计算内存池和可以存储的最大空间
     val (executionPool, storagePool, maxMemory) = memoryMode match {
       case MemoryMode.ON_HEAP => (
         onHeapExecutionMemoryPool,
@@ -194,12 +209,15 @@ private[spark] class UnifiedMemoryManager private[memory] (
         offHeapStorageMemoryPool,
         maxOffHeapStorageMemory)
     }
+    // 2.对要获得的存储大小进行校验，即numBytes不能大于可以存储的最大空间
     if (numBytes > maxMemory) {
       // Fail fast if the block simply won't fit
       logInfo(s"Will not store $blockId as the required space ($numBytes bytes) exceeds our " +
         s"memory limit ($maxMemory bytes)")
       return false
     }
+    // 3.如果要获得的存储大小比存储内存池的空闲空间要大，那么就到执行内存池中借用空间
+    //   借用的空间取numBytes和计算内存池的空闲空间的最大值
     if (numBytes > storagePool.memoryFree) {
       // There is not enough free memory in the storage pool, so try to borrow free memory from
       // the execution pool.
@@ -208,6 +226,7 @@ private[spark] class UnifiedMemoryManager private[memory] (
       executionPool.decrementPoolSize(memoryBorrowedFromExecution)
       storagePool.incrementPoolSize(memoryBorrowedFromExecution)
     }
+    // 4.从存储内存池获得存储BlockId对应的Block所需的空间
     storagePool.acquireMemory(blockId, numBytes)
   }
 
@@ -221,7 +240,7 @@ private[spark] class UnifiedMemoryManager private[memory] (
 
 /**
  * 预留内存:300m 存储内存比例:0.5 maxMemory比例:0.6
- * 1g - 300m = 700m => 700*0.6=420m storageMemory=executionMemory=210m
+ * 1g - 300m = 724m => 724*0.6=434m storageMemory=executionMemory=217m
  */
 object UnifiedMemoryManager {
 

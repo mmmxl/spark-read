@@ -35,6 +35,8 @@ import org.apache.spark.util.Utils
 /**
  * A variant of [[QueryExecution]] that allows the execution of the given [[LogicalPlan]]
  * plan incrementally. Possibly preserving state in between each execution.
+ *
+ * QueryExecution的一个变体，允许增量执行给定的LogicalPlan, 可能在每次执行之间保留状态
  */
 class IncrementalExecution(
     sparkSession: SparkSession,

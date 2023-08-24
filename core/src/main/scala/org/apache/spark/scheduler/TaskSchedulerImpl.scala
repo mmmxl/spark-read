@@ -94,7 +94,9 @@ private[spark] class TaskSchedulerImpl(
   private[scheduler] val taskIdToTaskSetManager = new ConcurrentHashMap[Long, TaskSetManager]
   val taskIdToExecutorId = new HashMap[Long, String]
 
+  // 标记TaskSchedulerImpl是否已经接收到Task
   @volatile private var hasReceivedTask = false
+  // 标记TaskSchedulerImpl接收的Task是否已经有运行过的
   @volatile private var hasLaunchedTask = false
   private val starvationTimer = new Timer(true)
 
@@ -364,6 +366,7 @@ private[spark] class TaskSchedulerImpl(
         hostToExecutors(o.host) = new HashSet[String]()
       }
       if (!executorIdToRunningTaskIds.contains(o.executorId)) {
+        // 更新Host与Executor的各种映射关系
         hostToExecutors(o.host) += o.executorId
         executorAdded(o.executorId, o.host)
         executorIdToHost(o.executorId) = o.host

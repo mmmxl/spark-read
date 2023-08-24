@@ -25,19 +25,19 @@ import org.apache.spark.util.Utils
 
 @DeveloperApi
 class RDDInfo(
-    val id: Int,
+    val id: Int, // RDD的id
     var name: String,
     val numPartitions: Int,
     var storageLevel: StorageLevel,
     val parentIds: Seq[Int],
-    val callSite: String = "",
-    val scope: Option[RDDOperationScope] = None)
+    val callSite: String = "", // RDD的用户调用栈信息
+    val scope: Option[RDDOperationScope] = None /* RDD的操作范围 可以在一个Stage内，也可以跨越多个Job*/)
   extends Ordered[RDDInfo] {
 
-  var numCachedPartitions = 0
-  var memSize = 0L
-  var diskSize = 0L
-  var externalBlockStoreSize = 0L
+  var numCachedPartitions = 0 // 缓存的分区数
+  var memSize = 0L // 使用的内存大小
+  var diskSize = 0L // 使用的磁盘大小
+  var externalBlockStoreSize = 0L // Block存储在外部的大小
 
   def isCached: Boolean = (memSize + diskSize > 0) && numCachedPartitions > 0
 

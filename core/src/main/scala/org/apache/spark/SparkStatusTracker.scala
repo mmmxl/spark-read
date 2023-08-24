@@ -41,10 +41,14 @@ class SparkStatusTracker private[spark] (sc: SparkContext, store: AppStatusStore
   /**
    * Return a list of all known jobs in a particular job group.  If `jobGroup` is `null`, then
    * returns all known jobs that are not associated with a job group.
+   * 返回一个特定作业组中所有已知作业的列表
+   * 如果`jobGroup`是`null`，则返回所有未与job group相关的已知工作。
    *
    * The returned list may contain running, failed, and completed jobs, and may vary across
    * invocations of this method.  This method does not guarantee the order of the elements in
    * its result.
+   * 返回的列表可能包含正在运行的、失败的和已完成的作业，并且可能在此方法的不同调用中有所不同
+   * 这个方法不保证其结果中的元素的顺序
    */
   def getJobIdsForGroup(jobGroup: String): Array[Int] = {
     val expected = Option(jobGroup)

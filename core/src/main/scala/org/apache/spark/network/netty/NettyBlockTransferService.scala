@@ -64,14 +64,18 @@ private[spark] class NettyBlockTransferService(
 
   override def init(blockDataManager: BlockDataManager): Unit = {
     val rpcHandler = new NettyBlockRpcServer(conf.getAppId, serializer, blockDataManager)
+    // 客户端引导程序
     var serverBootstrap: Option[TransportServerBootstrap] = None
+    // 服务端引导程序
     var clientBootstrap: Option[TransportClientBootstrap] = None
     if (authEnabled) {
       serverBootstrap = Some(new AuthServerBootstrap(transportConf, securityManager))
       clientBootstrap = Some(new AuthClientBootstrap(transportConf, conf.getAppId, securityManager))
     }
     transportContext = new TransportContext(transportConf, rpcHandler)
+    // 传输客户端工厂
     clientFactory = transportContext.createClientFactory(clientBootstrap.toSeq.asJava)
+    // 创建TransportServer
     server = createServer(serverBootstrap.toList)
     appId = conf.getAppId
     logInfo(s"Server created on ${hostName}:${server.getPort}")

@@ -27,6 +27,9 @@ import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.util.{RpcUtils, ThreadUtils}
 
+/** 对存在于Executor或Driver上的BlockManager进行统一管理
+ * 方法都是RpcEndpointRef的方法里面传BlockManagerMessages
+ */
 private[spark]
 class BlockManagerMaster(
     var driverEndpoint: RpcEndpointRef,
@@ -54,6 +57,7 @@ class BlockManagerMaster(
    * Register the BlockManager's id with the driver. The input BlockManagerId does not contain
    * topology information. This information is obtained from the master and we respond with an
    * updated BlockManagerId fleshed out with this information.
+   * 注册BlockManager
    */
   def registerBlockManager(
       blockManagerId: BlockManagerId,

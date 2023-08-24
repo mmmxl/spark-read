@@ -417,6 +417,7 @@ abstract class DeclarativeAggregate
  *
  * Stage 1: initialize aggregate buffer object.
  *
+ *
  *   1. The framework calls `initialize(buffer: MutableRow)` to set up the empty aggregate buffer.
  *   2. In `initialize`, we call `createAggregationBuffer(): T` to get the initial buffer object,
  *      and set it to the global buffer row.

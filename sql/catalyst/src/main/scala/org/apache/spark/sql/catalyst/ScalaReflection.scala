@@ -36,6 +36,8 @@ import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
  * A helper trait to create [[org.apache.spark.sql.catalyst.encoders.ExpressionEncoder]]s
  * for classes whose fields are entirely defined by constructor params but should not be
  * case classes.
+ * 用于创建[[org.apache.spark.sql.catalyst.encoders.ExpressionEncoder]]的辅助类，
+ * 这些类的字段完全由构造函数参数定义，但不应是样例类。
  */
 trait DefinedByConstructorParams
 

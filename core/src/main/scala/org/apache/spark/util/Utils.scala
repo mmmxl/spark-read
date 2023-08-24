@@ -66,7 +66,7 @@ import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
 import org.apache.spark.status.api.v1.{StackTrace, ThreadStackTrace}
 
-/** CallSite represents a place in user code. It can have a short and a long form. */
+/** CallSite represents a place in user code. It can have a short and a long form. CallSite 代表用户代码中的一个位置*/
 private[spark] case class CallSite(shortForm: String, longForm: String)
 
 private[spark] object CallSite {
@@ -1708,6 +1708,7 @@ private[spark] object Utils extends Logging {
   * i.e. if 'x' is negative, than 'x' % 'mod' is negative too
   * so function return (x % mod) + mod in that case.
   * 返回一个结果为[0, numPartitions)的整型
+  * 先取余，然后矫正(正数不变，负数+mod)
   */
   def nonNegativeMod(x: Int, mod: Int): Int = {
     val rawMod = x % mod
@@ -1812,6 +1813,7 @@ private[spark] object Utils extends Logging {
    * Counts the number of elements of an iterator using a while loop rather than calling
    * [[scala.collection.Iterator#size]] because it uses a for loop, which is slightly slower
    * in the current version of Scala.
+   * 为了性能用迭代器的方式来取代scala原生的for实现
    */
   def getIteratorSize(iterator: Iterator[_]): Long = {
     var count = 0L

@@ -29,6 +29,8 @@ import org.apache.spark.scheduler.JobListener
  * This class assumes that the action is performed on an entire RDD[T] via a function that computes
  * a result of type U for each partition, and that the action returns a partial or complete result
  * of type R. Note that the type R must *include* any error bars on it (e.g. see BoundedInt).
+ *
+ * 对于单一返回结果的Action算子(count()或非并行reduce())进行监听
  */
 private[spark] class ApproximateActionListener[T, U, R](
     rdd: RDD[T],

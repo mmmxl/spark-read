@@ -25,22 +25,22 @@ private class SparkJobInfoImpl (
 
 private class SparkStageInfoImpl(
     val stageId: Int,
-    val currentAttemptId: Int,
-    val submissionTime: Long,
-    val name: String,
-    val numTasks: Int,
-    val numActiveTasks: Int,
-    val numCompletedTasks: Int,
-    val numFailedTasks: Int)
+    val currentAttemptId: Int, // 当前尝试的id
+    val submissionTime: Long, // 提交时间戳
+    val name: String, // 名字
+    val numTasks: Int, // 任务数
+    val numActiveTasks: Int, // 活跃任务数
+    val numCompletedTasks: Int, // 结束任务数
+    val numFailedTasks: Int /* 失败任务数 */)
   extends SparkStageInfo
 
 private class SparkExecutorInfoImpl(
     val host: String,
     val port: Int,
-    val cacheSize: Long,
-    val numRunningTasks: Int,
-    val usedOnHeapStorageMemory: Long,
-    val usedOffHeapStorageMemory: Long,
-    val totalOnHeapStorageMemory: Long,
-    val totalOffHeapStorageMemory: Long)
+    val cacheSize: Long, // cache大小
+    val numRunningTasks: Int, // 运行中的任务数
+    val usedOnHeapStorageMemory: Long, // 被使用的堆内存储内存大小
+    val usedOffHeapStorageMemory: Long, // 被使用的堆外存储内存大小
+    val totalOnHeapStorageMemory: Long, // 堆内存储内存总和
+    val totalOffHeapStorageMemory: Long /* 堆外存储内存总和 */ )
   extends SparkExecutorInfo

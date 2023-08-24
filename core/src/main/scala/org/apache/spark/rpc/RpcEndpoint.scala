@@ -31,7 +31,7 @@ private[spark] trait RpcEnvFactory {
 /**
  * An end point for the RPC that defines what functions to trigger given a message.
  *
- * It is guaranteed that `onStart`, `receive` and `onStop` will be called in sequence.
+ * It is guaranteed(保证的) that `onStart`, `receive` and `onStop` will be called in sequence.
  *
  * The life-cycle of an endpoint is:
  *
@@ -54,9 +54,12 @@ private[spark] trait RpcEndpoint {
   /**
    * The [[RpcEndpointRef]] of this [[RpcEndpoint]]. `self` will become valid when `onStart` is
    * called. And `self` will become `null` when `onStop` is called.
+   * 这个[[RpcEndpoint]]的[[RpcEndpointRef]]。当调用`onStart`时，`self`将变得有效。
+   * 当`onStop`被调用时,`self`将变成`null`。
    *
    * Note: Because before `onStart`, [[RpcEndpoint]] has not yet been registered and there is not
    * valid [[RpcEndpointRef]] for it. So don't call `self` before `onStart` is called.
+   * 因为在onStart之前，[[RpcEndpoint]]尚未注册，而且没有有效的[[RpcEndpointRef]]。所以在调用`onStart`之前不要调用`self`。
    *
    * 获取RpcEndPoint相关联的RpcEndPointRef
    */
@@ -135,7 +138,7 @@ private[spark] trait RpcEndpoint {
   }
 
   /**
-   * A convenient method to stop [[RpcEndpoint]].
+   * A convenient(方便) method to stop [[RpcEndpoint]].
    */
   final def stop(): Unit = {
     val _self = self
@@ -155,5 +158,7 @@ private[spark] trait RpcEndpoint {
  *
  * However, there is no guarantee that the same thread will be executing the same
  * [[ThreadSafeRpcEndpoint]] for different messages.
+ *
+ * 线程安全的RpcEndpoint，对消息对处理都是串行的,即前一条消息处理完才能接着处理下一条消息
  */
 private[spark] trait ThreadSafeRpcEndpoint extends RpcEndpoint

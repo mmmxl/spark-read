@@ -37,6 +37,7 @@ object ObjectType extends AbstractDataType {
 
 /**
  * Represents a JVM object that is passing through Spark SQL expression evaluation.
+ * 代表一个正在通过Spark SQL表达式评估的JVM对象。
  */
 @InterfaceStability.Evolving
 case class ObjectType(cls: Class[_]) extends DataType {

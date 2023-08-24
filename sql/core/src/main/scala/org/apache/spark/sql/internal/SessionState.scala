@@ -36,6 +36,7 @@ import org.apache.spark.sql.util.{ExecutionListenerManager, QueryExecutionListen
 
 /**
  * A class that holds all session-specific state in a given [[SparkSession]].
+ * SparkSession的会话状态
  *
  * @param sharedState The state shared across sessions, e.g. global view manager, external catalog.
  * @param conf SQL-specific key-value configurations.
@@ -44,13 +45,13 @@ import org.apache.spark.sql.util.{ExecutionListenerManager, QueryExecutionListen
  * @param udfRegistration Interface exposed to the user for registering user-defined functions.
  * @param catalogBuilder a function to create an internal catalog for managing table and database
  *                       states.
- * @param sqlParser Parser that extracts expressions, plans, table identifiers etc. from SQL texts.
+ * @param sqlParser Parser that extracts expressions, plans, table identifiers etc. from SQL texts. sql解析器
  * @param analyzerBuilder A function to create the logical query plan analyzer for resolving
- *                        unresolved attributes and relations.
- * @param optimizerBuilder a function to create the logical query plan optimizer.
- * @param planner Planner that converts optimized logical plans to physical plans.
- * @param streamingQueryManager Interface to start and stop streaming queries.
- * @param listenerManager Interface to register custom [[QueryExecutionListener]]s.
+ *                        unresolved attributes and relations. 逻辑计划
+ * @param optimizerBuilder a function to create the logical query plan optimizer. 物理计划
+ * @param planner Planner that converts optimized logical plans to physical plans.  逻辑计划到物理计划的转换器
+ * @param streamingQueryManager Interface to start and stop streaming queries. 开关流查询
+ * @param listenerManager Interface to register custom [[QueryExecutionListener]]s. 监听器管理
  * @param resourceLoaderBuilder a function to create a session shared resource loader to load JARs,
  *                              files, etc.
  * @param createQueryExecution Function used to create QueryExecution objects.

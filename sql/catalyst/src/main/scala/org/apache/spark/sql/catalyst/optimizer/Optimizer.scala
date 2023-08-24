@@ -57,6 +57,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
     val operatorOptimizationRuleSet =
       Seq(
         // Operator push down
+        // 谓词下推操作
         PushProjectionThroughUnion,
         ReorderJoin,
         EliminateOuterJoin,
@@ -66,6 +67,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
         ColumnPruning,
         InferFiltersFromConstraints,
         // Operator combine
+        // 聚合操作
         CollapseRepartition,
         CollapseProject,
         CollapseWindow,
@@ -73,6 +75,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
         CombineLimits,
         CombineUnions,
         // Constant folding and strength reduction
+        // 持续折叠和强度降低
         NullPropagation,
         ConstantPropagation,
         FoldablePropagation,

@@ -73,6 +73,7 @@ object TypedAggregateExpression {
         outputType,
         !outputEncoder.flat || outputEncoder.schema.head.nullable)
     } else {
+
       ComplexTypedAggregateExpression(
         aggregator.asInstanceOf[Aggregator[Any, Any, Any]],
         None,

@@ -31,6 +31,9 @@ import org.apache.spark.sql.types._
  *
  * We have to store all the collected elements in memory, and so notice that too many elements
  * can cause GC paused and eventually OutOfMemory Errors.
+ *
+ * collect_list 和 collect_set 集合函数的基类。
+ * 我们必须将所有收集到的元素存储在内存中，所以注意元素太多可能会导致GC暂停，最终出现OutOfMemory错误。
  */
 abstract class Collect[T <: Growable[Any] with Iterable[Any]] extends TypedImperativeAggregate[T] {
 

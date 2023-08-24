@@ -28,10 +28,10 @@ import org.apache.spark.internal.Logging
  * results to the given handler function.
  */
 private[spark] class JobWaiter[T](
-    dagScheduler: DAGScheduler,
-    val jobId: Int,
-    totalTasks: Int,
-    resultHandler: (Int, T) => Unit)
+    dagScheduler: DAGScheduler, // 当前JobWaiter等待执行完成的Job的调度者
+    val jobId: Int, // 当前JobWaiter等待执行完成的Job的身份标识
+    totalTasks: Int, // 等待完成的Job包括的Task数量
+    resultHandler: (Int, T) => Unit /* 执行结果的处理器 */)
   extends JobListener with Logging {
 
   private val finishedTasks = new AtomicInteger(0)

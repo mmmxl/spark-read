@@ -96,6 +96,8 @@ private[spark] object ShutdownHookManager extends Logging {
   // Note: if file is child of some registered path, while not equal to it, then return true;
   // else false. This is to ensure that two shutdown hooks do not try to delete each others
   // paths - resulting in IOException and incomplete cleanup.
+  // 注意：如果文件是某个注册路径的孩子，但不等于它，那么返回true；否则返回false。
+  // 这是为了确保两个关机钩子不会试图删除对方的路径 - 导致IOException和不完整的清理。
   def hasRootAsShutdownDeleteDir(file: File): Boolean = {
     val absolutePath = file.getAbsolutePath()
     val retval = shutdownDeletePaths.synchronized {

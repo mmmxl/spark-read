@@ -27,6 +27,7 @@ class SparkException(message: String, cause: Throwable)
  * Exception thrown when execution of some user code in the driver process fails, e.g.
  * accumulator update fails or failure in takeOrdered (user supplies an Ordering implementation
  * that can be misbehaving.
+ * driver端用户代码在执行过程中失败
  */
 private[spark] class SparkDriverExecutionException(cause: Throwable)
   extends SparkException("Execution error", cause)

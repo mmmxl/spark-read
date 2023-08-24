@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.trees.TreeNode
 
 /**
  * Functions for attaching and retrieving trees that are associated with errors.
+ * SparkException走TreeNodeException, 其他走该抛出的异常
  */
 package object errors {
 

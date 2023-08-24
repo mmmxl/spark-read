@@ -40,6 +40,11 @@ import org.apache.spark.util.Utils
  * This class implements all of the configuration related to security features described
  * in the "Security" document. Please refer to that document for specific features implemented
  * here.
+ * 负责安全的Spark类
+ * 一般来说，这个类应该由SparkEnv实例化，大多数组件应该从SparkEnv访问它。在某些情况下，SparkEnv还没有被初始化，这个类必须直接被实例化。
+ * 该类实现了 "安全 "文档中描述的与安全功能有关的所有配置。此处实现的具体功能请参考该文件。
+ *
+ * 安全管理器
  */
 private[spark] class SecurityManager(
     sparkConf: SparkConf,
@@ -50,7 +55,7 @@ private[spark] class SecurityManager(
 
   // allow all users/groups to have view/modify permissions
   private val WILDCARD_ACL = "*"
-
+  /* 是否开启认证,通过spark.authenticate设置,默认false */
   private val authOn = sparkConf.get(NETWORK_AUTH_ENABLED)
   // keep spark.ui.acls.enable for backwards compatibility with 1.0
   private var aclsOn =

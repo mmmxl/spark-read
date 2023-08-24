@@ -33,6 +33,7 @@ trait BroadcastMode {
 
 /**
  * IdentityBroadcastMode requires that rows are broadcasted in their original form.
+ * identity的Broadcast模型，即不做处理，输入输出一致
  */
 case object IdentityBroadcastMode extends BroadcastMode {
   // TODO: pack the UnsafeRows into single bytes array.

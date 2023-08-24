@@ -33,7 +33,7 @@ private[rpc] class RpcTimeoutException(message: String, cause: TimeoutException)
 
 
 /**
- * Associates a timeout with a description so that a when a TimeoutException occurs, additional
+ * Associates  a timeout with a description so that a when a TimeoutException occurs, additional
  * context about the timeout can be amended to the exception message.
  *
  * @param duration timeout duration in seconds

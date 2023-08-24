@@ -30,6 +30,7 @@ private[sql] object InternalOutputModes {
    * OutputMode in which only the new rows in the streaming DataFrame/Dataset will be
    * written to the sink. This output mode can be only be used in queries that do not
    * contain any aggregation.
+   * 新行才会被写入sink，这种输出模式只能用于不包含任何聚合的查询
    */
   case object Append extends OutputMode
 
@@ -37,6 +38,7 @@ private[sql] object InternalOutputModes {
    * OutputMode in which all the rows in the streaming DataFrame/Dataset will be written
    * to the sink every time these is some updates. This output mode can only be used in queries
    * that contain aggregations.
+   * 更新时，所有行都将被写入sink。这种输出模式只能用于包含聚合的查询中。
    */
   case object Complete extends OutputMode
 
@@ -44,6 +46,7 @@ private[sql] object InternalOutputModes {
    * OutputMode in which only the rows in the streaming DataFrame/Dataset that were updated will be
    * written to the sink every time these is some updates. If the query doesn't contain
    * aggregations, it will be equivalent to `Append` mode.
+   * 被更新的行会被写入sink。如果查询不包含聚合，则相当于 "Append "模式。
    */
   case object Update extends OutputMode
 

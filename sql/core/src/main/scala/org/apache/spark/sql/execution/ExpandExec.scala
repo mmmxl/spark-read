@@ -29,6 +29,9 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
 /**
  * Apply all of the GroupExpressions to every input row, hence we will get
  * multiple output rows for an input row.
+ *
+ * 将所有的GroupExpressions应用到每一条输入行，因此我们将为一条输入行获得多条输出行。
+ *
  * @param projections The group of expressions, all of the group expressions should
  *                    output the same schema specified bye the parameter `output`
  * @param output      The output Schema

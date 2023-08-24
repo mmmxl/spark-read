@@ -68,15 +68,15 @@ import org.apache.spark.util.{CallSite, Utils}
  * }}}
  *
  * @param sparkContext The Spark context associated with this Spark session.
- * @param existingSharedState If supplied, use the existing shared state
- *                            instead of creating a new one.
+ * @param existingSharedState If supplied(有提供的), use the existing shared state
+ *                            instead of creating a new one. 跨会话状态
  * @param parentSessionState If supplied, inherit all session state (i.e. temporary
- *                            views, SQL config, UDFs etc) from parent.
+ *                            views, SQL config, UDFs etc) from parent. 跨会话隔离状态(非跨会话)
  */
 @InterfaceStability.Stable
 class SparkSession private(
-    @transient val sparkContext: SparkContext,
-    @transient private val existingSharedState: Option[SharedState],
+    @transient val sparkContext: SparkContext, // Spark环境上下文
+    @transient private val existingSharedState: Option[SharedState], //
     @transient private val parentSessionState: Option[SessionState],
     @transient private[sql] val extensions: SparkSessionExtensions)
   extends Serializable with Closeable with Logging { self =>
@@ -88,6 +88,7 @@ class SparkSession private(
     this(sc, None, None, new SparkSessionExtensions)
   }
 
+  /** 确认SparkContext没有停止 */
   sparkContext.assertNotStopped()
 
   // If there is no active SparkSession, uses the default SQL conf. Otherwise, use the session's.
@@ -112,6 +113,7 @@ class SparkSession private(
    * and a catalog that interacts with external systems.
    *
    * This is internal to Spark and there is no guarantee on interface stability.
+   * 跨会话共享的状态，包括SparkContext、缓存数据、listener以及与外部系统交互的catalog。
    *
    * @since 2.2.0
    */
@@ -133,6 +135,10 @@ class SparkSession private(
    * If `parentSessionState` is not null, the `SessionState` will be a copy of the parent.
    *
    * This is internal to Spark and there is no guarantee on interface stability.
+   *
+   * 跨会话隔离的状态，包括SQL配置，临时表，注册的函数，以及其他所有接受[[org.apache.spark.sql.internal.SQLConf]]的东西。
+   * 如果`parentSessionState`不是空的，那么`SessionState`将是父节点的副本。
+   * 这是Spark的内部规定，对接口的稳定性没有保证。
    *
    * @since 2.2.0
    */
@@ -173,6 +179,7 @@ class SparkSession private(
    * :: Experimental ::
    * An interface to register custom [[org.apache.spark.sql.util.QueryExecutionListener]]s
    * that listen for execution metrics.
+   * 监听执行指标的接口
    *
    * @since 2.0.0
    */
@@ -185,6 +192,7 @@ class SparkSession private(
    * A collection of methods that are considered experimental, but can be used to hook into
    * the query planner for advanced functionality.
    *
+   * 一系列被认为是实验性的方法，但可以用来挂入查询规划器以实现高级功能。
    * @since 2.0.0
    */
   @Experimental
@@ -765,7 +773,10 @@ class SparkSession private(
 
 }
 
-
+/**
+ * 管理session生命周期的
+ * 这里使用Builder设计模式和链式设计模式
+ */
 @InterfaceStability.Stable
 object SparkSession extends Logging {
 
@@ -797,7 +808,7 @@ object SparkSession extends Logging {
     /**
      * Sets a config option. Options set using this method are automatically propagated to
      * both `SparkConf` and SparkSession's own configuration.
-     *
+     * 配置会自动同步到SparkConf和SparkSession的配置中去
      * @since 2.0.0
      */
     def config(key: String, value: String): Builder = synchronized {
@@ -860,6 +871,9 @@ object SparkSession extends Logging {
      * Enables Hive support, including connectivity to a persistent Hive metastore, support for
      * Hive serdes, and Hive user-defined functions.
      *
+     * 设置spark.sql.catalogImplementation，用以支持Hive的元数据信息，序列化，udf
+     * instantiate 实例化
+     *
      * @since 2.0.0
      */
     def enableHiveSupport(): Builder = synchronized {
@@ -876,6 +890,8 @@ object SparkSession extends Logging {
      * Inject extensions into the [[SparkSession]]. This allows a user to add Analyzer rules,
      * Optimizer rules, Planning Strategies or a customized parser.
      *
+     * 在[[SparkSession]]中注入扩展
+     * 这允许用户添加Analyzer规则、Optimizer规则、Planning Strategies或自定义解析器。
      * @since 2.2.0
      */
     def withExtensions(f: SparkSessionExtensions => Unit): Builder = synchronized {
@@ -896,6 +912,15 @@ object SparkSession extends Logging {
      * In case an existing SparkSession is returned, the config options specified in
      * this builder will be applied to the existing SparkSession.
      *
+     * 1.检查是否在Driver端
+     * 2.如果当前线程存在活跃的SparkSession,就设置conf，然后直接返回 (可能部分设置无法生效)
+     * 3.如果当前线程存在默认的SparkSession,就设置conf，然后直接返回 (可能部分设置无法生效)
+     * 4.如果不存在活跃和默认的SparkSession,就创建SparkSession
+     *   4.1 SparkContext 有则获取，无则创建
+     *   4.2 如果用户设置了扩展类，在这里初始化扩展类
+     *   4.3 创建SparkSession，并添加配置
+     *   4.4 设置activeSession和defaultSession
+     *   4.5 添加一个SparkListener，用于Application结束时，将defaultSession置为null
      * @since 2.0.0
      */
     def getOrCreate(): SparkSession = synchronized {
@@ -913,6 +938,7 @@ object SparkSession extends Logging {
       // Global synchronization so we will only set the default session once.
       SparkSession.synchronized {
         // If the current thread does not have an active session, get it from the global session.
+        // 这里跟上面活跃对象的代码一直，对象换成了defaultSession
         session = defaultSession.get()
         if ((session ne null) && !session.sparkContext.isStopped) {
           options.foreach { case (k, v) => session.sessionState.conf.setConfString(k, v) }
@@ -924,6 +950,7 @@ object SparkSession extends Logging {
 
         // No active nor global default session. Create a new one.
         val sparkContext = userSuppliedContext.getOrElse {
+          // SparkContext 有则获取，无则创建
           val sparkConf = new SparkConf()
           options.foreach { case (k, v) => sparkConf.set(k, v) }
 
@@ -984,6 +1011,9 @@ object SparkSession extends Logging {
    * Changes the SparkSession that will be returned in this thread and its children when
    * SparkSession.getOrCreate() is called. This can be used to ensure that a given thread receives
    * a SparkSession with an isolated session, instead of the global (first created) context.
+   *
+   * 当调用SparkSession.getOrCreate()时，改变这个线程及其子线程将返回的SparkSession
+   * 这可以用来确保一个给定的线程接收到一个具有隔离会话的SparkSession，而不是全局（首次创建）上下文
    *
    * @since 2.0.0
    */
@@ -1066,7 +1096,7 @@ object SparkSession extends Logging {
   // Private methods from now on
   ////////////////////////////////////////////////////////////////////////////////////////
 
-  /** The active SparkSession for the current thread. */
+  /** The active SparkSession for the current thread. 当前线程的活跃SparkSession */
   private val activeThreadSession = new InheritableThreadLocal[SparkSession]
 
   /** Reference to the root SparkSession. */
@@ -1075,6 +1105,9 @@ object SparkSession extends Logging {
   private val HIVE_SESSION_STATE_BUILDER_CLASS_NAME =
     "org.apache.spark.sql.hive.HiveSessionStateBuilder"
 
+  /**
+   * 根据spark.sql.catalogImplementation选择合适的 会话状态类
+   */
   private def sessionStateClassName(conf: SparkConf): String = {
     conf.get(CATALOG_IMPLEMENTATION) match {
       case "hive" => HIVE_SESSION_STATE_BUILDER_CLASS_NAME
@@ -1082,6 +1115,9 @@ object SparkSession extends Logging {
     }
   }
 
+  /**
+   * 这是一个断言，SparkSession只能在Driver端创建
+   */
   private def assertOnDriver(): Unit = {
     if (Utils.isTesting && TaskContext.get != null) {
       // we're accessing it during task execution, fail.
@@ -1093,6 +1129,7 @@ object SparkSession extends Logging {
   /**
    * Helper method to create an instance of `SessionState` based on `className` from conf.
    * The result is either `SessionState` or a Hive based `SessionState`.
+   * 通过反射实例化
    */
   private def instantiateSessionState(
       className: String,
@@ -1109,6 +1146,7 @@ object SparkSession extends Logging {
   }
 
   /**
+   * 是否有hive class
    * @return true if Hive classes can be loaded, otherwise false.
    */
   private[spark] def hiveClassesArePresent: Boolean = {

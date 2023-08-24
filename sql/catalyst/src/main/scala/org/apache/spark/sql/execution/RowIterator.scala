@@ -29,6 +29,9 @@ import org.apache.spark.sql.catalyst.InternalRow
  * calls: Scala's iterator allows users to call `hasNext()` without immediately advancing the
  * iterator to consume the next row, whereas RowIterator combines these calls into a single
  * [[advanceNext()]] method.
+ *  与Scala迭代器API的一个主要区别是 "hasNext() "和 "next() "调用的融合
+ *  Scala的迭代器允许用户调用 "hasNext()"，而不需要立即推进迭代器去消耗下一行，
+ *  而RowIterator则将这些调用合并成一个单一的advanceNext()。
  */
 abstract class RowIterator {
   /**

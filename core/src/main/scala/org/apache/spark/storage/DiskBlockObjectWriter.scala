@@ -34,16 +34,20 @@ import org.apache.spark.util.Utils
  *
  * This class does not support concurrent writes. Also, once the writer has been opened it cannot be
  * reopened again.
+ *
+ * 在Shuffle阶段将map任务的输出写入磁盘，这样reduce任务就能够从磁盘获取map任务的中间输出了。
+ * DiskBlockObjectWriter用于将JVM中的对象直接写入磁盘文件中。DiskBlockObjectWriter允许
+ * 将数据追加到现有的Block。为了提高效率，DiskBlockObjectWriter保留了跨多个提交的底层文件通道。
  */
 private[spark] class DiskBlockObjectWriter(
-    val file: File,
+    val file: File, // 要写入的文件
     serializerManager: SerializerManager,
-    serializerInstance: SerializerInstance,
-    bufferSize: Int,
-    syncWrites: Boolean,
+    serializerInstance: SerializerInstance, // Serializer的实例
+    bufferSize: Int, // 缓冲大小
+    syncWrites: Boolean, // 是否同步写
     // These write metrics concurrently shared with other active DiskBlockObjectWriters who
     // are themselves performing writes. All updates must be relative.
-    writeMetrics: ShuffleWriteMetrics,
+    writeMetrics: ShuffleWriteMetrics, // 用于对Shuffle中间结果写入到磁盘的度量和统计
     val blockId: BlockId = null)
   extends OutputStream
   with Logging {
@@ -71,9 +75,9 @@ private[spark] class DiskBlockObjectWriter(
   private var fos: FileOutputStream = null
   private var ts: TimeTrackingOutputStream = null
   private var objOut: SerializationStream = null
-  private var initialized = false
-  private var streamOpen = false
-  private var hasBeenClosed = false
+  private var initialized = false // 是否已经初始化
+  private var streamOpen = false // 是否已经打开流
+  private var hasBeenClosed = false // 是否已经关闭
 
   /**
    * Cursors used to represent positions in the file.
@@ -89,15 +93,15 @@ private[spark] class DiskBlockObjectWriter(
    * -----: Current writes to the underlying file.
    * xxxxx: Committed contents of the file.
    */
-  private var committedPosition = file.length()
-  private var reportedPosition = committedPosition
+  private var committedPosition = file.length() // 提交的文件位置
+  private var reportedPosition = committedPosition // 报告给度量系统的文件位置
 
   /**
    * Keep track of number of records written and also use this to periodically
    * output bytes written since the latter is expensive to do for each record.
    * And we reset it after every commitAndGet called.
    */
-  private var numRecordsWritten = 0
+  private var numRecordsWritten = 0 // 一些的记录数
 
   private def initialize(): Unit = {
     fos = new FileOutputStream(file, true)
@@ -108,6 +112,9 @@ private[spark] class DiskBlockObjectWriter(
     mcs = new ManualCloseBufferedOutputStream
   }
 
+  /**
+   * 用于打开要写入文件的各种输出流及管道
+   */
   def open(): DiskBlockObjectWriter = {
     if (hasBeenClosed) {
       throw new IllegalStateException("Writer already closed. Cannot be reopened.")
@@ -161,7 +168,7 @@ private[spark] class DiskBlockObjectWriter(
   /**
    * Flush the partial writes and commit them as a single atomic block.
    * A commit may write additional bytes to frame the atomic block.
-   *
+   * 将输出流中的数据写入磁盘中
    * @return file segment with previous offset and length committed on this call.
    */
   def commitAndGet(): FileSegment = {
@@ -256,6 +263,7 @@ private[spark] class DiskBlockObjectWriter(
 
   /**
    * Notify the writer that a record worth of bytes has been written with OutputStream#write.
+   * 对于写入的记录数进行统计和度量
    */
   def recordWritten(): Unit = {
     numRecordsWritten += 1

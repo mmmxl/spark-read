@@ -26,12 +26,14 @@ import org.apache.spark.util.CallSite
  * The ResultStage object captures the function to execute, `func`, which will be applied to each
  * partition, and the set of partition IDs, `partitions`. Some stages may not run on all partitions
  * of the RDD, for actions like first() and lookup().
+ * 可以使用指定的函数对RDD中的分区进行计算并得出最终结果
+ * action算子触发
  */
 private[spark] class ResultStage(
     id: Int,
     rdd: RDD[_],
     val func: (TaskContext, Iterator[_]) => _,
-    val partitions: Array[Int],
+    val partitions: Array[Int], // 分区索引
     parents: List[Stage],
     firstJobId: Int,
     callSite: CallSite)
@@ -40,6 +42,7 @@ private[spark] class ResultStage(
   /**
    * The active job for this result stage. Will be empty if the job has already finished
    * (e.g., because the job was cancelled).
+   * 处理的活跃任务
    */
   private[this] var _activeJob: Option[ActiveJob] = None
 
@@ -57,6 +60,8 @@ private[spark] class ResultStage(
    * Returns the sequence of partition ids that are missing (i.e. needs to be computed).
    *
    * This can only be called when there is an active job.
+   * 当前Job的所有分区中还没有完成的分区的索引
+   * 通过ActiveJob的Boolean类型数组finished，因为finished记录了每个分区是否完成
    */
   override def findMissingPartitions(): Seq[Int] = {
     val job = activeJob.get

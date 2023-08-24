@@ -22,6 +22,7 @@ import java.lang.annotation.Documented;
 /**
  * Annotation to inform users of how much to rely on a particular package,
  * class or method not changing over time.
+ * 标识包，类或者方法的稳定性
  */
 public class InterfaceStability {
 
@@ -29,6 +30,7 @@ public class InterfaceStability {
    * Stable APIs that retain source and binary compatibility within a major release.
    * These interfaces can change from one major release to another major release
    * (e.g. from 1.0 to 2.0).
+   * 稳定api，但是大版本之间可能会发生改变
    */
   @Documented
   public @interface Stable {};
@@ -36,6 +38,8 @@ public class InterfaceStability {
   /**
    * APIs that are meant to evolve towards becoming stable APIs, but are not stable APIs yet.
    * Evolving interfaces can change from one feature release to another release (i.e. 2.1 to 2.2).
+   * 应该朝着稳定api的方向发展，但现在还不是稳定的api。
+   * 小版本之间会发生改变
    */
   @Documented
   public @interface Evolving {};
@@ -43,6 +47,7 @@ public class InterfaceStability {
   /**
    * Unstable APIs, with no guarantee on stability.
    * Classes that are unannotated are considered Unstable.
+   * 不稳定api
    */
   @Documented
   public @interface Unstable {};

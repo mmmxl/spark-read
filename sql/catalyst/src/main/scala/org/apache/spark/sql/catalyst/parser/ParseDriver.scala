@@ -65,8 +65,11 @@ abstract class AbstractSqlParser(conf: SQLConf) extends ParserInterface with Log
     astBuilder.visitSingleTableSchema(parser.singleTableSchema())
   }
 
-  /** Creates LogicalPlan for a given SQL string. */
+  /** Creates LogicalPlan for a given SQL string.
+   * 利用antlr4得到一个ast
+   * */
   override def parsePlan(sqlText: String): LogicalPlan = parse(sqlText) { parser =>
+    // singleStatement是antlr4的规则名
     astBuilder.visitSingleStatement(parser.singleStatement()) match {
       case plan: LogicalPlan => plan
       case _ =>
@@ -78,15 +81,20 @@ abstract class AbstractSqlParser(conf: SQLConf) extends ParserInterface with Log
   /** Get the builder (visitor) which converts a ParseTree into an AST. */
   protected def astBuilder: AstBuilder
 
+  /**
+   * 这里是antlr解析的方法
+   */
   protected def parse[T](command: String)(toResult: SqlBaseParser => T): T = {
     logDebug(s"Parsing command: $command")
-
+    // 这里可以看出传入antlr4的字符串是大写, 所以测试g4文件的时候必须使用大写
+    // 词法解析
     val lexer = new SqlBaseLexer(new UpperCaseCharStream(CharStreams.fromString(command)))
     lexer.removeErrorListeners()
     lexer.addErrorListener(ParseErrorListener)
     lexer.legacy_setops_precedence_enbled = conf.setOpsPrecedenceEnforced
-
+    // 生成词素
     val tokenStream = new CommonTokenStream(lexer)
+    // 语法解析
     val parser = new SqlBaseParser(tokenStream)
     parser.addParseListener(PostProcessor)
     parser.removeErrorListeners()

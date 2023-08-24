@@ -27,6 +27,7 @@ import org.apache.spark.sql.types._
 /**
  * :: Experimental ::
  * Used to convert a JVM object of type `T` to and from the internal Spark SQL representation.
+ * 用于将类型为`T`的JVM对象转换为内部的Spark SQL表示。
  *
  * == Scala ==
  * Encoders are generally created automatically through implicits from a `SparkSession`, or can be
@@ -64,6 +65,8 @@ import org.apache.spark.sql.types._
  *  - Encoders are not required to be thread-safe and thus they do not need to use locks to guard
  *    against concurrent access if they reuse internal buffers to improve performance.
  *
+ * 将JVM类型转换成Spark内部类型
+ * 一共2个方法，schema：Spark内部类型，clsTag：Jvm类型
  * @since 1.6.0
  */
 @Experimental

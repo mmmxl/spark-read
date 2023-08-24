@@ -52,6 +52,8 @@ sealed abstract class JoinType {
 /**
  * The explicitCartesian flag indicates if the inner join was constructed with a CROSS join
  * indicating a cartesian product has been explicitly requested.
+ *
+ * explicitCartesian标志表明内联接是否是用CROSS联接构造的，表明已经明确要求了一个cartesian产品。
  */
 sealed abstract class InnerLike extends JoinType {
   def explicitCartesian: Boolean
@@ -91,16 +93,19 @@ case class ExistenceJoin(exists: Attribute) extends JoinType {
   override def sql: String = {
     // This join type is only used in the end of optimizer and physical plans, we will not
     // generate SQL for this join type
+    // 这种连接类型只用于优化器和物理计划的末端，我们不会为这种连接类型生成SQL
     throw new UnsupportedOperationException
   }
 }
 
+// 正常的4种join
 case class NaturalJoin(tpe: JoinType) extends JoinType {
   require(Seq(Inner, LeftOuter, RightOuter, FullOuter).contains(tpe),
     "Unsupported natural join type " + tpe)
   override def sql: String = "NATURAL " + tpe.sql
 }
 
+// 这里没cross
 case class UsingJoin(tpe: JoinType, usingColumns: Seq[String]) extends JoinType {
   require(Seq(Inner, LeftOuter, LeftSemi, RightOuter, FullOuter, LeftAnti).contains(tpe),
     "Unsupported using join type " + tpe)

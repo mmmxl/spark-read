@@ -38,6 +38,7 @@ abstract class InternalRow extends SpecializedGetters with Serializable {
   /**
    * Updates the value at column `i`. Note that after updating, the given value will be kept in this
    * row, and the caller side should guarantee that this value won't be changed afterwards.
+   * 更新列`i`的值。更新后，给定的值会保留在这一行，调用方要保证这个值之后不会被改变。
    */
   def update(i: Int, value: Any): Unit
 
@@ -63,7 +64,7 @@ abstract class InternalRow extends SpecializedGetters with Serializable {
    */
   def copy(): InternalRow
 
-  /** Returns true if there are any NULL values in this row. */
+  /** Returns true if there are any NULL values in this row. row中是否有null */
   def anyNull: Boolean = {
     val len = numFields
     var i = 0
@@ -78,6 +79,7 @@ abstract class InternalRow extends SpecializedGetters with Serializable {
 
   /**
    * Return a Scala Seq representing the row. Elements are placed in the same order in the Seq.
+   * 拿schema来得到值的Seq
    */
   def toSeq(fieldTypes: Seq[DataType]): Seq[Any] = {
     val len = numFields
@@ -112,7 +114,7 @@ object InternalRow {
 
   /**
    * Copies the given value if it's string/struct/array/map type.
-   * 复制值
+   * 复制值(对象需要复制)
    */
   def copyValue(value: Any): Any = value match {
     case v: UTF8String => v.copy()
@@ -126,7 +128,8 @@ object InternalRow {
    * Returns an accessor for an `InternalRow` with given data type. The returned accessor
    * actually takes a `SpecializedGetters` input because it can be generalized to other classes
    * that implements `SpecializedGetters` (e.g., `ArrayData`) too.
-   * 目前另一个只有ArrayDate
+   * 返回给定数据类型的 "InternalRow "的访问器。
+   * 返回的访问器实际上是一个 "SpecializedGetters "的输入，因为它可以泛化到其他类。
    */
   def getAccessor(dataType: DataType): (SpecializedGetters, Int) => Any = dataType match {
     case BooleanType => (input, ordinal) => input.getBoolean(ordinal)
